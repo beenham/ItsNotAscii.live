@@ -6,12 +6,7 @@ import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.IncomingConnection;
 import akka.http.javadsl.ServerBinding;
-import akka.http.javadsl.model.ContentTypes;
-import akka.http.javadsl.model.HttpEntities;
-import akka.http.javadsl.model.HttpMethods;
-import akka.http.javadsl.model.HttpRequest;
-import akka.http.javadsl.model.HttpResponse;
-import akka.http.javadsl.model.Uri;
+import akka.http.javadsl.model.*;
 import akka.http.javadsl.model.headers.Location;
 import akka.japi.function.Function;
 import akka.stream.ActorMaterializer;
@@ -20,17 +15,12 @@ import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
 import akka.util.ByteString;
 
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.nio.file.DirectoryIteratorException;
-import java.nio.file.DirectoryStream;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CompletionStage;
 
@@ -90,44 +80,35 @@ public class Accepter {
 							} else if (uri.path().equals("/ping")) {
 								return HttpResponse.create().withEntity(CLEAR_SCREEN + "PONG!\n");
 							} else if (uri.path().equals("/thetragedy")) {
-								HashMap<Integer, byte[]> map = new HashMap<>();
+								System.out.println("The tragedy 2.0");
 
-								Path dir = Paths.get("./accepter/src/main/resources/loading/thetragedy/");
-								try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
-									for (Path file : stream) {
-										System.out.println(file.getFileName());
-										map.put(Integer.parseInt(file.getFileName().toString().replaceAll(".txt", "")),
-												Files.readAllBytes(file));
+								Path dir = Paths.get("./accepter/src/main/resources/loading/thetragedy/thetragedy.txt");
+								InputStream in = Files.newInputStream(dir);
+								int len = 0;
+								int x;
+
+								List<String> strings = new ArrayList<>();
+
+								while ((x = in.read()) > 0) {
+									len += x - '0';
+									while ((x = in.read()) != '\n') {
+										len *= 10;
+										len += x - '0';
 									}
-								} catch (IOException | DirectoryIteratorException x) {
-									// IOException can never be thrown by the iteration.
-									// In this snippet, it can only be thrown by newDirectoryStream.
-									System.err.println(x);
+									byte[] buffer = new byte[len];
+									in.read(buffer);
+									strings.add(new String(buffer));
+									// empty start of line
+									in.read();
+									len = 0;
 								}
-
-								System.out.println("Finished reading");
-
-								List<byte[]> s1 = new ArrayList<>(map.values());
-
-								StringBuilder sb = new StringBuilder();
-
-
-								for (byte[] bytes : s1) {
-									sb.append(bytes.length)
-											.append('\n')
-											.append(Arrays.toString(bytes))
-											.append('\n');
-								}
-
-								String fileName = "./accepter/src/main/resources/loading/thetragedy/full.txt";
-								Files.writeString(Paths.get(fileName), sb.toString(), Charset.defaultCharset());
 
 								int FPS = 24;
-								int framelength = s1.size();
+								int framelength = strings.size();
 								long duration = framelength < 24 ? 1 : framelength / FPS;
 
 								Source<ByteString, NotUsed> source = Source.range(0, framelength - 1)
-										.map(str -> ByteString.fromString(CLEAR_SCREEN + new String(s1.get(str)) + "\n"))
+										.map(str -> ByteString.fromString(CLEAR_SCREEN + strings.get(str) + "\n"))
 										.throttle(framelength, Duration.ofSeconds(duration * 4));
 
 								return HttpResponse.create()
