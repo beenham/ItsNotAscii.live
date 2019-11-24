@@ -1,18 +1,18 @@
 package live.itsnotascii;
 
+import akka.actor.AddressFromURIString;
 import akka.actor.typed.ActorSystem;
 import akka.cluster.typed.Cluster;
 import akka.cluster.typed.Join;
+import akka.cluster.typed.JoinSeedNodes;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.IncomingConnection;
 import akka.http.javadsl.ServerBinding;
-import akka.http.javadsl.model.ContentTypes;
-import akka.http.javadsl.model.HttpMethods;
+import akka.http.javadsl.model.HttpHeader;
 import akka.http.javadsl.model.HttpRequest;
 import akka.http.javadsl.model.HttpResponse;
 import akka.http.javadsl.model.Uri;
-import akka.http.javadsl.model.headers.Location;
 import akka.japi.function.Function;
 import akka.stream.Materializer;
 import akka.stream.javadsl.Sink;
@@ -21,15 +21,16 @@ import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import live.itsnotascii.cache.Cache;
 import live.itsnotascii.cache.CacheManager;
+import live.itsnotascii.cache.Listener;
+import live.itsnotascii.core.Constants;
 import live.itsnotascii.core.Event;
-import live.itsnotascii.main.Listener;
 
+import java.util.Collections;
 import java.util.concurrent.CompletionStage;
 
 public class Main {
-	private static final int WEB_PORT = 80;
+	private static final int WEB_PORT = 81;
 	private static final String WEB_HOST = "127.0.0.1";
-	private static final String CLEAR_SCREEN = "\u001B[2J\u001B[H";
 
 	private static Config clusterConfig =
 			ConfigFactory.parseString(
@@ -38,24 +39,24 @@ public class Main {
 							+ "  remote.artery { \n"
 							+ "    canonical { \n"
 							+ "      hostname = \"127.0.0.1\" \n"
-							+ "      port = 25520 \n"
+							+ "      port = 25521 \n"
 							+ "    } \n"
 							+ "  } \n"
 							+ "}  \n");
 
 	private static Config noPort =
 			ConfigFactory.parseString(
-					"      akka.remote.classic.netty.tcp.port = 25520 \n"
-							+ "      akka.remote.artery.canonical.port = 25520 \n");
+					"      akka.remote.classic.netty.tcp.port = 25521 \n"
+							+ "      akka.remote.artery.canonical.port = 25521 \n");
 
 	public static void main(String... args) {
-		ActorSystem<Event> system = ActorSystem.create(Listener.create("MainListener" ),
+		ActorSystem<Event> system = ActorSystem.create(Listener.create("Listener" ),
 				"ItsNotAscii", noPort.withFallback(clusterConfig));
 
-		Cluster cluster = Cluster.get(system);
-		cluster.manager().tell(Join.create(cluster.selfMember().address()));
 
-		system.tell(new CacheManager.Init("CacheManager" ));
+//		Cluster cluster = Cluster.get(system);
+//		cluster.manager().tell(new JoinSeedNodes(
+//				Collections.singletonList(AddressFromURIString.parse("akka://ItsNotAscii@127.0.0.1:25520"))));
 
 		final Materializer materializer = Materializer.createMaterializer(system);
 		final Function<HttpRequest, HttpResponse> requestHandler =
@@ -65,29 +66,17 @@ public class Main {
 							.withEntity("Unknown resource!\n" );
 
 					@Override
-					public HttpResponse apply(HttpRequest r) throws Exception {
+					public HttpResponse apply(HttpRequest r) {
 						Uri uri = r.getUri();
 
+						System.out.println(r);
+
 						if (r.getHeaders() != null) {
-							if (r.getHeader(Cache.REGISTER_REQUEST).isPresent()) {
-								String sendTo = r.getHeader(Cache.REGISTER_REQUEST).get().value();
-								String location = "127.0.0.1:25520";
-								system.tell(new Listener.RegisterRequest(sendTo, location));
+							System.out.println("Headers not empty");
+							if (r.getHeader(Cache.REGISTER_ACCEPT).isPresent()) {
+								System.out.println("Yeet");
+								system.tell(new Cache.Init("Cache", r.getHeader(Cache.REGISTER_ACCEPT).get().value()));
 							}
-
-							if (r.getHeader("user-agent" ).isPresent()
-									&& !r.getHeader("user-agent" ).toString().contains("curl" ))
-								return HttpResponse.create()
-										.withStatus(302)
-										.withEntity("You fool, you should be using this with curl!" )
-										.addHeader(Location.create("https://github.com/beenham/itsnotascii.live" ));
-						}
-
-
-						if (r.method() == HttpMethods.GET) {
-							if (uri.path().equals("/" ))
-								return HttpResponse.create().withEntity(ContentTypes.TEXT_PLAIN_UTF8,
-										CLEAR_SCREEN + "Welcome to ItsNotAscii.live!\n" );
 						}
 
 						return NOT_FOUND;
@@ -103,5 +92,13 @@ public class Main {
 		})).run(materializer);
 
 
+
+		Http http = Http.get(system.classicSystem());
+		HttpRequest request = HttpRequest.create()
+				.withUri(Uri.create("http://127.0.0.1"))
+				.addHeader(HttpHeader.parse(Cache.REGISTER_REQUEST, "http://"+WEB_HOST+":"+WEB_PORT));
+		http.singleRequest(request);
+
+		System.out.println("Sent: " + request);
 	}
 }

@@ -30,6 +30,12 @@
             <scope>compile</scope>
         </dependency>
         <dependency>
+            <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-cluster-typed_2.13</artifactId>
+            <version>${akka.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
             <groupId>live.itsnotascii</groupId>
             <artifactId>core</artifactId>
             <version>1.0</version>
