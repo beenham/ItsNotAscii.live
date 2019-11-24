@@ -1,18 +1,14 @@
 package live.itsnotascii;
 
 import akka.actor.typed.ActorSystem;
-import akka.cluster.typed.Cluster;
-import akka.cluster.typed.Join;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.IncomingConnection;
 import akka.http.javadsl.ServerBinding;
-import akka.http.javadsl.model.ContentTypes;
-import akka.http.javadsl.model.HttpMethods;
+import akka.http.javadsl.model.HttpHeader;
 import akka.http.javadsl.model.HttpRequest;
 import akka.http.javadsl.model.HttpResponse;
 import akka.http.javadsl.model.Uri;
-import akka.http.javadsl.model.headers.Location;
 import akka.japi.function.Function;
 import akka.stream.Materializer;
 import akka.stream.javadsl.Sink;
@@ -20,19 +16,17 @@ import akka.stream.javadsl.Source;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import live.itsnotascii.cache.Cache;
-import live.itsnotascii.cache.CacheManager;
+import live.itsnotascii.cache.Listener;
 import live.itsnotascii.core.Event;
-import live.itsnotascii.main.Listener;
 import live.itsnotascii.util.Args;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletionStage;
 
-public class Main {
+public class CacheMain {
 	private static final int WEB_PORT = 80;
 	private static final String WEB_HOST = "127.0.0.1";
-	private static final String CLEAR_SCREEN = "\u001B[2J\u001B[H";
 
 	public static void main(String... inputArgs) {
 		Config cfg = ConfigFactory.load();
@@ -42,6 +36,7 @@ public class Main {
 		String sysHost = cfg.getString("akka.remote.artery.canonical.hostname" );
 		int sysPort = cfg.getInt("akka.remote.artery.canonical.port" );
 		String sysName = "ItsNotAscii";
+		String target = "http://127.0.0.1";
 
 		//	Parsing arguments
 		//	TODO: use jcommander ¬.¬
@@ -62,6 +57,9 @@ public class Main {
 				case "-n":
 					sysName = inputArgs[++i];
 					break;
+				case "-t":
+					target = inputArgs[++i];
+					break;
 				default:
 					System.out.println("Unknown flag: " + inputArgs[i] + "\n" + "TODO Args\n" );
 					System.exit(0);
@@ -75,11 +73,9 @@ public class Main {
 		overrides.put("akka.remote.artery.bind.port", args.port);
 		overrides.put("akka.remote.artery.bind.hostname", args.host);
 
-		//	Creating Actor System
-		ActorSystem<Event> system = ActorSystem.create(Listener.create("MainListener" ),
+		ActorSystem<Event> system = ActorSystem.create(Listener.create("Listener" ),
 				args.name, ConfigFactory.parseMap(overrides).withFallback(cfg));
 
-		//	Setting up HTTP listener
 		final Materializer materializer = Materializer.createMaterializer(system);
 		final Function<HttpRequest, HttpResponse> requestHandler =
 				new Function<>() {
@@ -88,29 +84,11 @@ public class Main {
 							.withEntity("Unknown resource!\n" );
 
 					@Override
-					public HttpResponse apply(HttpRequest req) throws Exception {
-						Uri uri = req.getUri();
-
+					public HttpResponse apply(HttpRequest req) {
 						if (req.getHeaders() != null) {
-							if (req.getHeader(Cache.REGISTER_REQUEST).isPresent()) {
-								String sendTo = req.getHeader(Cache.REGISTER_REQUEST).get().value();
-								String location = String.format("%s:%d", args.host, args.port);
-								system.tell(new Listener.RegisterRequest(sendTo, location));
+							if (req.getHeader(Cache.REGISTER_ACCEPT).isPresent()) {
+								system.tell(new Cache.Init("Cache", req.getHeader(Cache.REGISTER_ACCEPT).get().value()));
 							}
-
-							if (req.getHeader("user-agent" ).isPresent()
-									&& !req.getHeader("user-agent" ).toString().contains("curl" ))
-								return HttpResponse.create()
-										.withStatus(302)
-										.withEntity("You fool, you should be using this with curl!" )
-										.addHeader(Location.create("https://github.com/beenham/itsnotascii.live" ));
-						}
-
-
-						if (req.method() == HttpMethods.GET) {
-							if (uri.path().equals("/" ))
-								return HttpResponse.create().withEntity(ContentTypes.TEXT_PLAIN_UTF8,
-										CLEAR_SCREEN + "Welcome to ItsNotAscii.live!\n" );
 						}
 
 						return NOT_FOUND;
@@ -125,11 +103,10 @@ public class Main {
 			c.handleWithSyncHandler(requestHandler, materializer);
 		})).run(materializer);
 
-		//	Initializing cluster
-		Cluster cluster = Cluster.get(system);
-		cluster.manager().tell(Join.create(cluster.selfMember().address()));
-
-		//	Initializing managers
-		system.tell(new CacheManager.Init("CacheManager" ));
+		Http http = Http.get(system.classicSystem());
+		HttpRequest request = HttpRequest.create()
+				.withUri(Uri.create(target))
+				.addHeader(HttpHeader.parse(Cache.REGISTER_REQUEST, "http://" + args.webHost + ":" + args.webPort));
+		http.singleRequest(request);
 	}
 }
