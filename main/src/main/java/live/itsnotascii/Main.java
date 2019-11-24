@@ -30,7 +30,7 @@ import java.util.Map;
 import java.util.concurrent.CompletionStage;
 
 public class Main {
-	private static final int WEB_PORT = 80;
+	private static final int WEB_PORT = 1264;
 	private static final String WEB_HOST = "127.0.0.1";
 	private static final String CLEAR_SCREEN = "\u001B[2J\u001B[H";
 
@@ -106,13 +106,13 @@ public class Main {
 										.addHeader(Location.create("https://github.com/beenham/itsnotascii.live" ));
 						}
 
-
 						if (req.method() == HttpMethods.GET) {
-							if (uri.path().equals("/" ))
+							if (uri.path().equals("/" )) {
+								system.tell(new CacheManager.Test("Sad Face :("));
 								return HttpResponse.create().withEntity(ContentTypes.TEXT_PLAIN_UTF8,
 										CLEAR_SCREEN + "Welcome to ItsNotAscii.live!\n" );
+							}
 						}
-
 						return NOT_FOUND;
 					}
 				};

@@ -8,13 +8,11 @@ import akka.actor.typed.javadsl.AbstractBehavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
-import akka.actor.typed.receptionist.Receptionist;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.model.HttpHeader;
 import akka.http.javadsl.model.HttpRequest;
 import live.itsnotascii.cache.Cache;
 import live.itsnotascii.cache.CacheManager;
-import live.itsnotascii.core.Constants;
 import live.itsnotascii.core.Event;
 
 public class Listener extends AbstractBehavior<Event> {
@@ -36,6 +34,7 @@ public class Listener extends AbstractBehavior<Event> {
 		return newReceiveBuilder()
 				.onMessage(CacheManager.Init.class, this::onCreateCacheManager)
 				.onMessage(RegisterRequest.class, this::onRegisterRequest)
+				.onMessage(CacheManager.Test.class, this::test)
 				//.onMessage(CacheManager.Test.class, this::test)
 				.onSignal(PostStop.class, s -> onPostStop())
 				.build();
