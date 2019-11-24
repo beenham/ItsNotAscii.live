@@ -4,8 +4,8 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>live</groupId>
-        <artifactId>itsnotascii</artifactId>
+        <groupId>live.itsnotascii</groupId>
+        <artifactId>parent</artifactId>
         <version>1.0</version>
     </parent>
     <artifactId>cache</artifactId>
@@ -40,12 +40,6 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>1.18.10</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>live</groupId>
-            <artifactId>core</artifactId>
-            <version>1.0</version>
             <scope>compile</scope>
         </dependency>
     </dependencies>
