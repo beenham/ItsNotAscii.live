@@ -30,45 +30,14 @@ import java.util.Map;
 import java.util.concurrent.CompletionStage;
 
 public class Main {
-	private static final int WEB_PORT = 1264;
+	private static final int WEB_PORT = 80;
 	private static final String WEB_HOST = "127.0.0.1";
 	private static final String CLEAR_SCREEN = "\u001B[2J\u001B[H";
 
 	public static void main(String... inputArgs) {
 		Config cfg = ConfigFactory.load();
+		Args args = parseArgs(cfg, inputArgs);
 
-		String webHost = WEB_HOST;
-		int webPort = WEB_PORT;
-		String sysHost = cfg.getString("akka.remote.artery.canonical.hostname" );
-		int sysPort = cfg.getInt("akka.remote.artery.canonical.port" );
-		String sysName = "ItsNotAscii";
-
-		//	Parsing arguments
-		//	TODO: use jcommander ¬.¬
-		for (int i = 0; i < inputArgs.length; i++) {
-			switch (inputArgs[i]) {
-				case "-wh":
-					webHost = inputArgs[++i];
-					break;
-				case "-wp":
-					webPort = Integer.parseInt(inputArgs[++i]);
-					break;
-				case "-h":
-					sysHost = inputArgs[++i];
-					break;
-				case "-p":
-					sysPort = Integer.parseInt(inputArgs[++i]);
-					break;
-				case "-n":
-					sysName = inputArgs[++i];
-					break;
-				default:
-					System.out.println("Unknown flag: " + inputArgs[i] + "\n" + "TODO Args\n" );
-					System.exit(0);
-			}
-		}
-
-		final Args args = new Args(webHost, sysHost, sysName, webPort, sysPort);
 		Map<String, Object> overrides = new HashMap<>();
 		overrides.put("akka.remote.artery.canonical.port", args.port);
 		overrides.put("akka.remote.artery.canonical.hostname", args.host);
@@ -128,8 +97,45 @@ public class Main {
 		//	Initializing cluster
 		Cluster cluster = Cluster.get(system);
 		cluster.manager().tell(Join.create(cluster.selfMember().address()));
+	}
 
-		//	Initializing managers
-		system.tell(new CacheManager.Init("CacheManager" ));
+	private static Args parseArgs(Config cfg, String... args) {
+
+		String webHost = WEB_HOST;
+		int webPort = WEB_PORT;
+		String sysHost = cfg.getString("akka.remote.artery.canonical.hostname" );
+		int sysPort = cfg.getInt("akka.remote.artery.canonical.port" );
+		String sysName = "ItsNotAscii";
+		String target = "http://localhost";
+
+		//	Parsing arguments
+		//	TODO: use jcommander ¬.¬
+		for (int i = 0; i < args.length; i++) {
+			switch (args[i]) {
+				case "-wh":
+					webHost = args[++i];
+					break;
+				case "-wp":
+					webPort = Integer.parseInt(args[++i]);
+					break;
+				case "-h":
+					sysHost = args[++i];
+					break;
+				case "-p":
+					sysPort = Integer.parseInt(args[++i]);
+					break;
+				case "-n":
+					sysName = args[++i];
+					break;
+				case "-t":
+					target = args[++i];
+					break;
+				default:
+					System.out.println("Unknown flag: " + args[i] + "\n" + "TODO Args\n" );
+					System.exit(0);
+			}
+		}
+
+		return new Args(webHost, sysHost, sysName, webPort, sysPort, target);
 	}
 }

@@ -3,7 +3,6 @@ package live.itsnotascii.cache;
 import akka.actor.AddressFromURIString;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.PostStop;
-import akka.actor.typed.Props;
 import akka.actor.typed.javadsl.AbstractBehavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
@@ -11,6 +10,7 @@ import akka.actor.typed.javadsl.Receive;
 import akka.cluster.typed.Cluster;
 import akka.cluster.typed.JoinSeedNodes;
 import live.itsnotascii.core.Event;
+import live.itsnotascii.core.JoinCluster;
 
 import java.util.Collections;
 
@@ -21,6 +21,8 @@ public class Listener extends AbstractBehavior<Event> {
 		super(context);
 		this.id = id;
 		context.getLog().info("Listener {} started", this.id);
+
+		context.spawn(Cache.create("Cache"), "Cache");
 	}
 
 	public static Behavior<Event> create(String id) {
@@ -30,8 +32,7 @@ public class Listener extends AbstractBehavior<Event> {
 	@Override
 	public Receive<Event> createReceive() {
 		return newReceiveBuilder()
-				.onMessage(Cache.Init.class, this::onInitCache)
-				//.onMessage(CacheManager.Test.class, this::test)
+				.onMessage(JoinCluster.class, this::onJoinCluster)
 				.onSignal(PostStop.class, s -> onPostStop())
 				.build();
 	}
@@ -41,10 +42,8 @@ public class Listener extends AbstractBehavior<Event> {
 		return this;
 	}
 
-	private Listener onInitCache(Cache.Init r) {
+	private Listener onJoinCluster(JoinCluster r) {
 		String location = getContext().getSystem() + "@" + r.getLocation();
-
-		getContext().getSystem().systemActorOf(Cache.create(r.getId()), r.getId(), Props.empty());
 
 		Cluster cluster = Cluster.get(getContext().getSystem());
 		cluster.manager().tell(new JoinSeedNodes(

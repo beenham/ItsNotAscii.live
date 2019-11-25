@@ -18,6 +18,7 @@ import com.typesafe.config.ConfigFactory;
 import live.itsnotascii.cache.Cache;
 import live.itsnotascii.cache.Listener;
 import live.itsnotascii.core.Event;
+import live.itsnotascii.core.JoinCluster;
 import live.itsnotascii.util.Args;
 
 import java.util.HashMap;
@@ -30,43 +31,7 @@ public class CacheMain {
 
 	public static void main(String... inputArgs) {
 		Config cfg = ConfigFactory.load();
-
-		String webHost = WEB_HOST;
-		int webPort = WEB_PORT;
-		String sysHost = cfg.getString("akka.remote.artery.canonical.hostname" );
-		int sysPort = cfg.getInt("akka.remote.artery.canonical.port" );
-		String sysName = "ItsNotAscii";
-		String target = "http://127.0.0.1";
-
-		//	Parsing arguments
-		//	TODO: use jcommander ¬.¬
-		for (int i = 0; i < inputArgs.length; i++) {
-			switch (inputArgs[i]) {
-				case "-wh":
-					webHost = inputArgs[++i];
-					break;
-				case "-wp":
-					webPort = Integer.parseInt(inputArgs[++i]);
-					break;
-				case "-h":
-					sysHost = inputArgs[++i];
-					break;
-				case "-p":
-					sysPort = Integer.parseInt(inputArgs[++i]);
-					break;
-				case "-n":
-					sysName = inputArgs[++i];
-					break;
-				case "-t":
-					target = inputArgs[++i];
-					break;
-				default:
-					System.out.println("Unknown flag: " + inputArgs[i] + "\n" + "TODO Args\n" );
-					System.exit(0);
-			}
-		}
-
-		final Args args = new Args(webHost, sysHost, sysName, webPort, sysPort);
+		Args args = parseArgs(cfg, inputArgs);
 		Map<String, Object> overrides = new HashMap<>();
 		overrides.put("akka.remote.artery.canonical.port", args.port);
 		overrides.put("akka.remote.artery.canonical.hostname", args.host);
@@ -87,7 +52,7 @@ public class CacheMain {
 					public HttpResponse apply(HttpRequest req) {
 						if (req.getHeaders() != null) {
 							if (req.getHeader(Cache.REGISTER_ACCEPT).isPresent()) {
-								system.tell(new Cache.Init("Cache", req.getHeader(Cache.REGISTER_ACCEPT).get().value()));
+								system.tell(new JoinCluster(req.getHeader(Cache.REGISTER_ACCEPT).get().value()));
 							}
 						}
 
@@ -105,8 +70,47 @@ public class CacheMain {
 
 		Http http = Http.get(system.classicSystem());
 		HttpRequest request = HttpRequest.create()
-				.withUri(Uri.create(target))
+				.withUri(Uri.create(args.target))
 				.addHeader(HttpHeader.parse(Cache.REGISTER_REQUEST, "http://" + args.webHost + ":" + args.webPort));
 		http.singleRequest(request);
+	}
+
+	private static Args parseArgs(Config cfg, String... args) {
+		String webHost = WEB_HOST;
+		int webPort = WEB_PORT;
+		String sysHost = cfg.getString("akka.remote.artery.canonical.hostname" );
+		int sysPort = cfg.getInt("akka.remote.artery.canonical.port" );
+		String sysName = "ItsNotAscii";
+		String target = "http://localhost";
+
+		//	Parsing arguments
+		//	TODO: use jcommander ¬.¬
+		for (int i = 0; i < args.length; i++) {
+			switch (args[i]) {
+				case "-wh":
+					webHost = args[++i];
+					break;
+				case "-wp":
+					webPort = Integer.parseInt(args[++i]);
+					break;
+				case "-h":
+					sysHost = args[++i];
+					break;
+				case "-p":
+					sysPort = Integer.parseInt(args[++i]);
+					break;
+				case "-n":
+					sysName = args[++i];
+					break;
+				case "-t":
+					target = args[++i];
+					break;
+				default:
+					System.out.println("Unknown flag: " + args[i] + "\n" + "TODO Args\n" );
+					System.exit(0);
+			}
+		}
+
+		return new Args(webHost, sysHost, sysName, webPort, sysPort, target);
 	}
 }

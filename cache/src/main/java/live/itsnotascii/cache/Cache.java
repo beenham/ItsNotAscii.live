@@ -1,22 +1,18 @@
 package live.itsnotascii.cache;
 
-import akka.actor.AddressFromURIString;
 import akka.actor.typed.Behavior;
+import akka.actor.typed.PostStop;
 import akka.actor.typed.javadsl.AbstractBehavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.receptionist.Receptionist;
 import akka.actor.typed.receptionist.ServiceKey;
-import akka.cluster.typed.Cluster;
-import akka.cluster.typed.JoinSeedNodes;
 import live.itsnotascii.core.Event;
-import lombok.Getter;
 
 import java.io.Serializable;
-import java.util.Collections;
 
-public class Cache extends AbstractBehavior<Event> {
+public class Cache extends AbstractBehavior<Cache.Command> {
 	public static final String REGISTER_REQUEST = "CacheRegisterRequest";
 	public static final String REGISTER_ACCEPT = "CacheRegisterAccept";
 
@@ -24,39 +20,36 @@ public class Cache extends AbstractBehavior<Event> {
 
 	private final String id;
 
-	private Cache(ActorContext<Event> context, String id) {
+	private Cache(ActorContext<Command> context, String id) {
 		super(context);
 		this.id = id;
 
-		getContext().getLog().info("I am alive! {}", getContext().getSelf());
+		context.getLog().info("I am alive! {}", context.getSelf());
 	}
 
-	public static Behavior<Event> create(String id) {
+	public static Behavior<Command> create(String id) {
 		return Behaviors.setup(context -> {
-			context.getSystem().receptionist().tell(Receptionist.register(CACHE_SERVICE_KEY, context.getSelf().narrow()));
-
+			context.getSystem().receptionist()
+					.tell(Receptionist.register(CACHE_SERVICE_KEY, context.getSelf().narrow()));
 			return new Cache(context, id);
 		});
 	}
 
 	@Override
-	public Receive<Event> createReceive() {
+	public Receive<Command> createReceive() {
 		return newReceiveBuilder()
-				.onMessage(CacheManager.Test.class, test -> {System.out.println(test); return Behaviors.same();})
+				.onMessage(CacheManager.Test.class, test -> {
+					System.out.println("Message received from manager: " + test.getMessage());
+					return Behaviors.same();
+				})
+				.onSignal(PostStop.class, s -> onPostStop())
 				.build();
 	}
 
-	public interface Command extends Event, Serializable {
-
+	private Behavior<Command> onPostStop() {
+		getContext().getLog().info("Cache actor {} stopped", this);
+		return Behaviors.stopped();
 	}
 
-	public static class Init implements Event {
-		@Getter
-		private final String id, location;
-
-		public Init(String id, String location) {
-			this.id = id;
-			this.location = location;
-		}
-	}
+	public interface Command extends Event, Serializable {}
 }
