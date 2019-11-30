@@ -7,69 +7,188 @@ import akka.actor.typed.javadsl.AbstractBehavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
+import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
-import akka.http.javadsl.model.HttpHeader;
-import akka.http.javadsl.model.HttpRequest;
+import akka.http.javadsl.IncomingConnection;
+import akka.http.javadsl.ServerBinding;
+import akka.http.javadsl.model.*;
+import akka.http.javadsl.model.headers.Location;
+import akka.japi.function.Function;
+import akka.stream.Materializer;
+import akka.stream.javadsl.Sink;
+import akka.stream.javadsl.Source;
 import live.itsnotascii.cache.Cache;
 import live.itsnotascii.cache.CacheManager;
 import live.itsnotascii.core.Event;
+import live.itsnotascii.util.Arguments;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.CompletionStage;
 
 public class Listener extends AbstractBehavior<Event> {
-	private final String id;
-	private ActorRef<CacheManager.Command> cacheManager;
+    private static final String CLEAR_SCREEN = "\u001B[2J\u001B[H";
 
-	private Listener(ActorContext<Event> context, String id) {
-		super(context);
-		this.id = id;
-		context.getLog().info("I am alive! {}", context.getSelf());
+    private final String id;
+    private final ActorRef<CacheManager.Command> cacheManager;
+    private final Map<Long, CacheManager.Video> responses;
 
-		this.cacheManager = context.spawn(CacheManager.create("CacheManager"), "CacheManager");
-	}
+    private Listener(ActorContext<Event> context, String id) {
+        super(context);
+        this.id = id;
+        this.responses = new HashMap<>();
+        context.getLog().info("I am alive! {}", context.getSelf());
 
-	public static Behavior<Event> create(String id) {
-		return Behaviors.setup(c -> new Listener(c, id));
-	}
+        this.cacheManager = context.spawn(CacheManager.create("CacheManager"), "CacheManager");
 
-	@Override
-	public Receive<Event> createReceive() {
-		return newReceiveBuilder()
-				.onMessage(RegisterRequest.class, this::onRegisterRequest)
-				.onMessage(CacheManager.Test.class, this::test)
-				.onSignal(PostStop.class, s -> onPostStop())
-				.build();
-	}
+        setupHttpListener();
+    }
 
-	private Listener test(CacheManager.Test r) {
-		this.cacheManager.tell(r);
-		return this;
-	}
+    public static Behavior<Event> create(String id) {
+        return Behaviors.setup(c -> new Listener(c, id));
+    }
 
-	private Listener onPostStop() {
-		getContext().getLog().info("Listener {} stopped.", this.id);
-		return this;
-	}
+    @Override
+    public Receive<Event> createReceive() {
+        return newReceiveBuilder()
+                .onMessage(RegisterRequest.class, this::onRegisterRequest)
+                .onMessage(CacheManager.RespondVideo.class, this::onResponseVideo)
+                .onMessage(CacheManager.RequestVideo.class, this::onRequestVideo)
+                .onMessage(CacheManager.Test.class, this::test)
+                .onSignal(PostStop.class, s -> onPostStop())
+                .build();
+    }
 
-	private Listener onRegisterRequest(RegisterRequest r) {
-		System.out.println(getContext().getSystem().name());
-		System.out.println(getContext().getSystem().path());
+    private Listener onRegisterRequest(RegisterRequest req) {
+        System.out.println(getContext().getSystem().name());
+        System.out.println(getContext().getSystem().path());
 
-		Http http = Http.get(getContext().getSystem().classicSystem());
-		HttpRequest request = HttpRequest.create()
-				.withUri(r.sender)
-				.addHeader(HttpHeader.parse(Cache.REGISTER_ACCEPT, r.location));
-		http.singleRequest(request);
+        Http http = Http.get(getContext().getSystem().classicSystem());
+        HttpRequest request = HttpRequest.create()
+                .withUri(req.sender)
+                .addHeader(HttpHeader.parse(Cache.REGISTER_ACCEPT, req.location));
+        http.singleRequest(request);
 
-		System.out.println("Sending register request: " + r.location + " to " + r.sender);
-		return this;
-	}
+        System.out.println("Sending register request: " + req.location + " to " + req.sender);
+        return this;
+    }
 
-	public static class RegisterRequest implements Event {
-		private final String sender;
-		private final String location;
+    private Listener test(CacheManager.Test r) {
+        this.cacheManager.tell(new CacheManager.RequestVideo(getContext().getSelf().narrow(), "test"));
+        return this;
+    }
 
-		public RegisterRequest(String sender, String location) {
-			this.sender = sender;
-			this.location = location;
-		}
-	}
+    private Listener onResponseVideo(CacheManager.RespondVideo respondVideo) {
+        if (respondVideo.getVideoFile() instanceof CacheManager.Video) {
+            CacheManager.Video video = (CacheManager.Video) respondVideo.getVideoFile();
+            responses.put(respondVideo.getRequestId(), video);
+            getContext().getSystem().log().info("Cache Video Response received video with request ID {}", respondVideo.getRequestId());
+            getContext().getSystem().log().info("Video: " + video.getValue());
+        } else {
+            responses.put(respondVideo.getRequestId(), null);
+            if (respondVideo.getVideoFile() instanceof CacheManager.VideoNotFound) {
+                getContext().getSystem().log().info("Cache Video Response for request ID {}, VideoNotFound", respondVideo.getRequestId());
+            } else if (respondVideo.getVideoFile() instanceof CacheManager.CacheTimedOut) {
+                getContext().getSystem().log().info("Cache Video Response for request ID {}, Timeout", respondVideo.getRequestId());
+            } else {
+                getContext().getSystem().log().info("Cache Video Response for request ID {}, Unknown type");
+            }
+        }
+
+        return this;
+    }
+
+    private Listener onRequestVideo(CacheManager.RequestVideo requestVideo) {
+        this.cacheManager.tell(requestVideo);
+        return this;
+    }
+
+    private Listener onPostStop() {
+        getContext().getLog().info("Listener {} stopped.", this.id);
+        return this;
+    }
+
+    private void setupHttpListener() {
+        Arguments args = Arguments.get();
+        ActorContext<Event> context = getContext();
+        //	Setting up HTTP listener
+        final Materializer materializer = Materializer.createMaterializer(context.getSystem());
+        final Function<HttpRequest, HttpResponse> requestHandler =
+                new Function<>() {
+                    private final HttpResponse NOT_FOUND = HttpResponse.create()
+                            .withStatus(404)
+                            .withEntity("Unknown resource!\n");
+
+                    @Override
+                    public HttpResponse apply(HttpRequest req) throws Exception {
+                        Uri uri = req.getUri();
+
+                        if (req.getHeaders() != null) {
+                            if (req.getHeader(Cache.REGISTER_REQUEST).isPresent()) {
+                                String sendTo = req.getHeader(Cache.REGISTER_REQUEST).get().value();
+                                String location = String.format("%s:%d", args.getHostname(), args.getPort());
+                                context.getSelf().tell(new Listener.RegisterRequest(sendTo, location));
+                            }
+
+                            if (req.getHeader("user-agent").isPresent()
+                                    && !req.getHeader("user-agent").toString().contains("curl"))
+                                return HttpResponse.create()
+                                        .withStatus(302)
+                                        .withEntity("You fool, you should be using this with curl!")
+                                        .addHeader(Location.create("https://github.com/beenham/itsnotascii.live"));
+                        }
+
+                        if (req.method() == HttpMethods.GET) {
+                            if (uri.path().equals("/")) {
+                                context.getSelf().tell(new CacheManager.Test("Sad Face :("));
+                                return HttpResponse.create().withEntity(ContentTypes.TEXT_PLAIN_UTF8,
+                                        CLEAR_SCREEN + "Welcome to ItsNotAscii.live!\n");
+                            } else if (uri.path().startsWith("/")) {
+                                String videoCode = uri.path().substring(1);
+                                getContext().getSystem().log().info("HTTP Video Request {}", videoCode);
+                                CacheManager.RequestVideo requestVideo = new CacheManager.RequestVideo(getContext().getSelf().narrow(), videoCode);
+
+                                context.getSelf().tell(requestVideo);
+
+                                Long requestTime = System.currentTimeMillis();
+                                Long currentTime = System.currentTimeMillis();
+                                while (!responses.containsKey(requestVideo.getRequestId()) && 10000 > currentTime - requestTime) {
+                                    currentTime = System.currentTimeMillis();
+                                    Thread.sleep(500);
+                                }
+
+                                CacheManager.Video video = responses.getOrDefault(requestVideo.getRequestId(), null);
+
+                                if (video != null) {
+                                    return HttpResponse.create().withEntity(ContentTypes.TEXT_PLAIN_UTF8,
+                                            CLEAR_SCREEN + video.getValue() + "\n");
+                                } else {
+                                    return HttpResponse.create().withEntity(ContentTypes.TEXT_PLAIN_UTF8,
+                                            CLEAR_SCREEN + "Video Not Found :(\n");
+                                }
+
+                            }
+                        }
+                        return NOT_FOUND;
+                    }
+                };
+
+        Source<IncomingConnection, CompletionStage<ServerBinding>> serverSource =
+                Http.get(context.getSystem().classicSystem()).bind(ConnectHttp.toHost(args.getWebHostname(), args.getWebPort()));
+
+        serverSource.to(Sink.foreach(c -> {
+            System.out.println("Accepted new connection from " + c.remoteAddress());
+            c.handleWithSyncHandler(requestHandler, materializer);
+        })).run(materializer);
+    }
+
+    public static class RegisterRequest implements Event {
+        private final String sender;
+        private final String location;
+
+        public RegisterRequest(String sender, String location) {
+            this.sender = sender;
+            this.location = location;
+        }
+    }
 }

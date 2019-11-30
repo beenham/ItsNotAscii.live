@@ -55,7 +55,6 @@ public class CacheMain {
 									system.tell(new JoinCluster(req.getHeader(Cache.REGISTER_ACCEPT).get().value()));
 								}
 							}
-
 							return NOT_FOUND;
 						}
 					};
