@@ -40,6 +40,10 @@ public class Arguments {
 	@Parameter(names = {"-t", "--target"}, description = "The default target for the cluster.")
 	private String target = "http://localhost";
 
+	@Getter
+	@Parameter(names = {"-v", "--verbose"}, description = "The default target for the cluster.")
+	private Boolean verbose = false;
+
 	@Parameter(names = {"-h, --help"}, description = "Displays this message and terminates.", help = true)
 	private Boolean help;
 
