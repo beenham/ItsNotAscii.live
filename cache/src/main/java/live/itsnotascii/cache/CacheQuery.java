@@ -2,122 +2,124 @@ package live.itsnotascii.cache;
 
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
-import akka.actor.typed.javadsl.*;
+import akka.actor.typed.javadsl.AbstractBehavior;
+import akka.actor.typed.javadsl.ActorContext;
+import akka.actor.typed.javadsl.Behaviors;
+import akka.actor.typed.javadsl.Receive;
+import akka.actor.typed.javadsl.TimerScheduler;
 
 import java.time.Duration;
-
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
 public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 
-    private final long requestId;
-    private final ActorRef<CacheManager.RespondVideo> requester;
-    private final Set<String> stillWaiting;
+	private final long requestId;
+	private final ActorRef<CacheManager.RespondVideo> requester;
+	private final Set<String> stillWaiting;
 
-    private CacheQuery(
-            Map<String, ActorRef<Cache.Command>> cacheIdToActor,
-            long requestId,
-            ActorRef<CacheManager.RespondVideo> requester,
-            String videoCode,
-            Duration timeout,
-            ActorContext<Command> context,
-            TimerScheduler<Command> timers) {
+	private CacheQuery(
+			Map<String, ActorRef<Cache.Command>> cacheIdToActor,
+			long requestId,
+			ActorRef<CacheManager.RespondVideo> requester,
+			String videoCode,
+			Duration timeout,
+			ActorContext<Command> context,
+			TimerScheduler<Command> timers) {
 
-        super(context);
-        this.requestId = requestId;
-        this.requester = requester;
+		super(context);
+		this.requestId = requestId;
+		this.requester = requester;
 
-        timers.startSingleTimer(CollectionTimeout.class, CollectionTimeout.INSTANCE, timeout);
+		timers.startSingleTimer(CollectionTimeout.class, CollectionTimeout.INSTANCE, timeout);
 
-        ActorRef<Cache.RespondVideo> respondTemperatureAdapter =
-                context.messageAdapter(Cache.RespondVideo.class, WrappedRespondVideo::new);
+		ActorRef<Cache.RespondVideo> respondTemperatureAdapter =
+				context.messageAdapter(Cache.RespondVideo.class, WrappedRespondVideo::new);
 
-        for (Map.Entry<String, ActorRef<Cache.Command>> entry : cacheIdToActor.entrySet()) {
-            context.watchWith(entry.getValue(), new CacheTerminated(entry.getKey()));
-            entry.getValue().tell(new Cache.RetrieveVideo(0L, respondTemperatureAdapter, videoCode));
-        }
-        stillWaiting = new HashSet<>(cacheIdToActor.keySet());
-    }
+		for (Map.Entry<String, ActorRef<Cache.Command>> entry : cacheIdToActor.entrySet()) {
+			context.getLog().info("Sending request to {}:{}", entry.getKey(), entry.getValue());
+			context.watchWith(entry.getValue(), new CacheTerminated(entry.getKey()));
+			entry.getValue().tell(new Cache.RetrieveVideo(0L, respondTemperatureAdapter, videoCode));
+		}
+		stillWaiting = new HashSet<>(cacheIdToActor.keySet());
+	}
 
-    @Override
-    public Receive<Command> createReceive() {
-        return newReceiveBuilder()
-                .onMessage(WrappedRespondVideo.class, this::onRespondVideo)
-                .onMessage(CacheTerminated.class, this::onCacheTerminated)
-                .onMessage(CollectionTimeout.class, this::onCollectionTimeout)
-                .build();
-    }
+	public static Behavior<Command> create(
+			Map<String, ActorRef<Cache.Command>> cacheIdToActor,
+			long requestId,
+			ActorRef<CacheManager.RespondVideo> requester,
+			String videoCode,
+			Duration timeout) {
+		return Behaviors.setup(context ->
+				Behaviors.withTimers(timers ->
+						new CacheQuery(cacheIdToActor, requestId, requester, videoCode, timeout, context, timers)
+				)
+		);
+	}
 
-    private Behavior<Command> onRespondVideo(WrappedRespondVideo r) {
-        stillWaiting.remove(r.response.cacheId);
-        CacheManager.Video video = new CacheManager.Video(r.response.video);
+	@Override
+	public Receive<Command> createReceive() {
+		return newReceiveBuilder()
+				.onMessage(WrappedRespondVideo.class, this::onRespondVideo)
+				.onMessage(CacheTerminated.class, this::onCacheTerminated)
+				.onMessage(CollectionTimeout.class, this::onCollectionTimeout)
+				.build();
+	}
 
-        getContext().getSystem().log().info("Video Response Cache Query");
+	private Behavior<Command> onRespondVideo(WrappedRespondVideo r) {
+		stillWaiting.remove(r.response.cacheId);
+		CacheManager.Video video = new CacheManager.Video(r.response.video);
 
-        if (video.value != null) {
-            requester.tell(new CacheManager.RespondVideo(requestId, video));
-            getContext().getSystem().log().debug("Cache Query Found Video for request ID {}", r.response.requestId);
-        } else if (stillWaiting.isEmpty()) {
-            requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
-            getContext().getSystem().log().info("stillWaiting is empty for request ID {}", r.response.requestId);
-        }
+		getContext().getLog().info("Video Response Cache Query");
 
-        return this;
-    }
+		if (video.value != null) {
+			requester.tell(new CacheManager.RespondVideo(requestId, video));
+			getContext().getLog().debug("Cache Query Found Video for request ID {}", r.response.requestId);
+		} else if (stillWaiting.isEmpty()) {
+			requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
+			getContext().getLog().info("stillWaiting is empty for request ID {}", r.response.requestId);
+		}
 
-    private Behavior<Command> onCacheTerminated(CacheTerminated terminated) {
-        if (stillWaiting.contains(terminated.cacheId)) {
-            stillWaiting.remove(terminated.cacheId);
-        }
-        getContext().getSystem().log().info("Cache terminated");
+		return this;
+	}
 
-        if (stillWaiting.isEmpty()) {
-            requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
-        }
-        return this;
-    }
+	private Behavior<Command> onCacheTerminated(CacheTerminated terminated) {
+		stillWaiting.remove(terminated.cacheId);
+		getContext().getLog().info("Cache terminated");
 
-    private Behavior<Command> onCollectionTimeout(CollectionTimeout timeout) {
-        getContext().getSystem().log().info("Timeout");
-        requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.CacheTimedOut.INSTANCE));
-        return this;
-    }
+		if (stillWaiting.isEmpty()) {
+			requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
+		}
+		return this;
+	}
 
-    public interface Command {
-    }
+	private Behavior<Command> onCollectionTimeout(CollectionTimeout timeout) {
+		getContext().getLog().info("Timeout");
+		requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.CacheTimedOut.INSTANCE));
+		return this;
+	}
 
-    private enum CollectionTimeout implements Command {
-        INSTANCE
-    }
+	private enum CollectionTimeout implements Command {
+		INSTANCE
+	}
 
-    static class WrappedRespondVideo implements Command {
-        final Cache.RespondVideo response;
+	public interface Command {
+	}
 
-        WrappedRespondVideo(Cache.RespondVideo response) {
-            this.response = response;
-        }
-    }
+	static class WrappedRespondVideo implements Command {
+		final Cache.RespondVideo response;
 
-    private static class CacheTerminated implements Command {
-        final String cacheId;
+		WrappedRespondVideo(Cache.RespondVideo response) {
+			this.response = response;
+		}
+	}
 
-        private CacheTerminated(String cacheId) {
-            this.cacheId = cacheId;
-        }
-    }
+	private static class CacheTerminated implements Command {
+		final String cacheId;
 
-    public static Behavior<Command> create(
-            Map<String, ActorRef<Cache.Command>> cacheIdToActor,
-            long requestId,
-            ActorRef<CacheManager.RespondVideo> requester,
-            String videoCode,
-            Duration timeout) {
-        return Behaviors.setup(context ->
-                Behaviors.withTimers(timers ->
-                        new CacheQuery(cacheIdToActor, requestId, requester, videoCode, timeout, context, timers)
-                )
-        );
-    }
+		private CacheTerminated(String cacheId) {
+			this.cacheId = cacheId;
+		}
+	}
 }

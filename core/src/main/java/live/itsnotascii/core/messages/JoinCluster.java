@@ -1,8 +1,8 @@
-package live.itsnotascii.core;
+package live.itsnotascii.core.messages;
 
 import lombok.Getter;
 
-public class JoinCluster implements Event {
+public class JoinCluster implements Command {
 	@Getter
 	private final String location;
 
