@@ -7,7 +7,6 @@ import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.javadsl.TimerScheduler;
-import live.itsnotascii.core.UnicodeVideo;
 
 import java.time.Duration;
 import java.util.HashSet;
@@ -74,7 +73,9 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 
 		getContext().getLog().info("Video Response Cache Query");
 
-		if (wrappedVideo.video.getFrames() != null) {
+		if (wrappedVideo.video == null) {
+			requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
+		} else if (wrappedVideo.video.getFrames() != null) {
 			requester.tell(new CacheManager.RespondVideo(requestId, wrappedVideo));
 			getContext().getLog().debug("Cache Query Found Video for request ID {}", r.response.requestId);
 		} else if (stillWaiting.isEmpty()) {

@@ -24,7 +24,7 @@ public class CacheMain {
 		try {
 			commander.parse(inputArgs);
 			Arguments args = Arguments.get();
-			Config cfg = ConfigFactory.load();
+			Config cfg = ConfigFactory.load("application.conf");
 
 
 			//	font: ANSI Shadow

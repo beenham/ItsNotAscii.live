@@ -12,25 +12,37 @@ import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.IncomingConnection;
 import akka.http.javadsl.ServerBinding;
-import akka.http.javadsl.model.*;
+import akka.http.javadsl.model.ContentTypes;
+import akka.http.javadsl.model.HttpEntities;
+import akka.http.javadsl.model.HttpHeader;
+import akka.http.javadsl.model.HttpMethods;
+import akka.http.javadsl.model.HttpRequest;
+import akka.http.javadsl.model.HttpResponse;
+import akka.http.javadsl.model.Uri;
 import akka.http.javadsl.model.headers.Location;
 import akka.japi.function.Function;
 import akka.stream.Materializer;
 import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
 import akka.util.ByteString;
+import live.itsnotascii.cache.Cache;
 import live.itsnotascii.cache.CacheManager;
 import live.itsnotascii.core.Constants;
+import live.itsnotascii.core.Regex;
 import live.itsnotascii.core.UnicodeVideo;
 import live.itsnotascii.core.messages.Command;
+import live.itsnotascii.core.messages.HttpResponses;
 import live.itsnotascii.util.Arguments;
+import live.itsnotascii.util.Log;
 
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletionStage;
+import java.util.regex.Matcher;
 
 public class Coordinator extends AbstractBehavior<Command> {
+	private static final String TAG = Coordinator.class.getCanonicalName();
 	private static final String CLEAR_SCREEN = "\u001B[2J\u001B[H";
 
 	private final String id;
@@ -58,14 +70,12 @@ public class Coordinator extends AbstractBehavior<Command> {
 				.onMessage(RegisterRequest.class, this::onRegisterRequest)
 				.onMessage(CacheManager.RespondVideo.class, this::onResponseVideo)
 				.onMessage(CacheManager.RequestVideo.class, this::onRequestVideo)
-				.onMessage(CacheManager.Test.class, this::test)
 				.onSignal(PostStop.class, s -> onPostStop())
 				.build();
 	}
 
 	private Coordinator onRegisterRequest(RegisterRequest req) {
-		System.out.println(getContext().getSystem().name());
-		System.out.println(getContext().getSystem().path());
+		Log.v(TAG, String.format("Register request from %s", req.sender));
 
 		Http http = Http.get(getContext().getSystem().classicSystem());
 		HttpRequest request = HttpRequest.create()
@@ -73,12 +83,7 @@ public class Coordinator extends AbstractBehavior<Command> {
 				.addHeader(HttpHeader.parse(Constants.REGISTER_ACCEPT, req.location));
 		http.singleRequest(request);
 
-		System.out.println("Sending register request: " + req.location + " to " + req.sender);
-		return this;
-	}
-
-	private Coordinator test(CacheManager.Test r) {
-		this.cacheManager.tell(new CacheManager.RequestVideo(getContext().getSelf().narrow(), "test"));
+		Log.v(TAG, String.format("Sent register accept (%s) to %s", req.location, req.sender));
 		return this;
 	}
 
@@ -86,16 +91,15 @@ public class Coordinator extends AbstractBehavior<Command> {
 		if (respondVideo.getVideo() instanceof CacheManager.WrappedVideo) {
 			CacheManager.WrappedVideo wrappedVideo = (CacheManager.WrappedVideo) respondVideo.getVideo();
 			responses.put(respondVideo.getRequestId(), wrappedVideo.getVideo());
-			getContext().getSystem().log().info("Cache Video Response received video with request ID {}", respondVideo.getRequestId());
-			getContext().getSystem().log().info("Video: " + String.join(", ", wrappedVideo.getVideo().getFrames()));
+			getContext().getLog().info("Cache Video Response received video for #{}", respondVideo.getRequestId());
 		} else {
 			responses.put(respondVideo.getRequestId(), null);
 			if (respondVideo.getVideo() instanceof CacheManager.VideoNotFound) {
-				getContext().getSystem().log().info("Cache Video Response for request ID {}, VideoNotFound", respondVideo.getRequestId());
+				getContext().getLog().info("Cache Video Response for #{}, VideoNotFound", respondVideo.getRequestId());
 			} else if (respondVideo.getVideo() instanceof CacheManager.CacheTimedOut) {
-				getContext().getSystem().log().info("Cache Video Response for request ID {}, Timeout", respondVideo.getRequestId());
+				getContext().getLog().info("Cache Video Response for #{}, Timeout", respondVideo.getRequestId());
 			} else {
-				getContext().getSystem().log().info("Cache Video Response for request ID {}, Unknown type");
+				getContext().getLog().info("Cache Video Response is Unknown type");
 			}
 		}
 
@@ -121,10 +125,18 @@ public class Coordinator extends AbstractBehavior<Command> {
 				new Function<>() {
 					private final HttpResponse NOT_FOUND = HttpResponse.create()
 							.withStatus(404)
-							.withEntity("Unknown resource!\n");
+							.withEntity(CLEAR_SCREEN + "\n" + HttpResponses.NOT_FOUND);
+
+					private final HttpResponse INVALID_LINK = HttpResponse.create()
+							.withStatus(404)
+							.withEntity(CLEAR_SCREEN + "\n" + HttpResponses.INVALID_URL);
+
+					private final HttpResponse WELCOME = HttpResponse.create()
+							.withStatus(404)
+							.withEntity(CLEAR_SCREEN + "\n" + HttpResponses.WELCOME_SCREEN);
 
 					@Override
-					public HttpResponse apply(HttpRequest req) throws Exception {
+					public HttpResponse apply(HttpRequest req) {
 						Uri uri = req.getUri();
 
 						if (req.getHeaders() != null) {
@@ -144,42 +156,72 @@ public class Coordinator extends AbstractBehavior<Command> {
 
 						if (req.method() == HttpMethods.GET) {
 							if (uri.path().equals("/")) {
-								context.getSelf().tell(new CacheManager.Test("Sad Face :("));
-								return HttpResponse.create().withEntity(ContentTypes.TEXT_PLAIN_UTF8,
-										CLEAR_SCREEN + "Welcome to ItsNotAscii.live!\n");
+								return WELCOME;
+							} else if (Cache.INTERNAL_VIDEOS.contains(uri.path().substring(1))) {
+								return getHttpResponse(new CacheManager.RequestVideo(
+										getContext().getSelf().narrow(), uri.path().substring(1)));
 							} else if (uri.path().startsWith("/")) {
-								String videoCode = uri.path().substring(1);
-								getContext().getSystem().log().info("HTTP Video Request {}", videoCode);
-								CacheManager.RequestVideo requestVideo = new CacheManager.RequestVideo(getContext().getSelf().narrow(), videoCode);
+								String input = uri.path().substring(1);
+								getContext().getLog().info("HTTP Video Request {}", input);
 
-								context.getSelf().tell(requestVideo);
-
-								long requestTime = System.currentTimeMillis();
-								long currentTime = System.currentTimeMillis();
-								while (!responses.containsKey(requestVideo.getRequestId()) && 10000 > currentTime - requestTime) {
-									currentTime = System.currentTimeMillis();
-									Thread.sleep(500);
+								if (uri.query().get("v").isPresent()) {
+									input += "?v=" + uri.query().get("v").get();
 								}
 
-								UnicodeVideo video = responses.getOrDefault(requestVideo.getRequestId(), null);
+								String url;
+								String videoCode;
 
-								if (video != null) {
-									int FPS = 24;
-									int frameLength = video.getFrames().size();
-									long duration = frameLength < 24 ? 1 : frameLength / FPS;
+								Matcher matcher = Regex.YOUTUBE_LINK.matcher(input);
 
-									Source<ByteString, NotUsed> source = Source.range(0, frameLength - 1)
-											.map(str -> ByteString.fromString(video.getFrames().get(str) + "\n"))
-											.throttle(frameLength, Duration.ofSeconds(duration * 4));
+								if (matcher.find()) {
+									videoCode = matcher.group("link");
+									url = "https://youtube.com/watch?v=" + videoCode;
 
-									return HttpResponse.create()
-											.withEntity(HttpEntities.createChunked(ContentTypes.TEXT_PLAIN_UTF8, source));
+									Log.v(TAG, String.format("Input %s - %s (link) > %s (code)", uri, url, videoCode));
+								} else if ((matcher = Regex.VIDEO_CODE.matcher(input)).find()) {
+									videoCode = matcher.group();
+									url = "https://youtube.com/watch?v=" + videoCode;
+
+									Log.v(TAG, String.format("Input %s - %s (link) > %s (code)", uri, url, videoCode));
 								} else {
-									return HttpResponse.create().withEntity(ContentTypes.TEXT_PLAIN_UTF8,
-											CLEAR_SCREEN + "Video Not Found :(\n");
+									return INVALID_LINK;
 								}
 
+								CacheManager.RequestVideo requestVideo =
+										new CacheManager.RequestVideo(getContext().getSelf().narrow(), videoCode);
+
+								return getHttpResponse(requestVideo);
 							}
+						}
+						return NOT_FOUND;
+					}
+
+					private HttpResponse getHttpResponse(CacheManager.RequestVideo req) {
+						context.getSelf().tell(req);
+
+						long requestTime = System.currentTimeMillis();
+						long currentTime = System.currentTimeMillis();
+						while (!responses.containsKey(req.getRequestId()) && 10000 > currentTime - requestTime) {
+							currentTime = System.currentTimeMillis();
+							try {
+								Thread.sleep(500);
+							} catch (InterruptedException ignore) {
+							}
+						}
+
+						UnicodeVideo video = responses.getOrDefault(req.getRequestId(), null);
+
+						if (video != null) {
+							int FPS = 24;
+							int frameLength = video.getFrames().size();
+							long duration = frameLength < 24 ? 1 : frameLength / FPS;
+
+							Source<ByteString, NotUsed> source = Source.range(0, frameLength - 1)
+									.map(str -> ByteString.fromString(video.getFrames().get(str) + "\n"))
+									.throttle(frameLength, Duration.ofSeconds(duration * 4));
+
+							return HttpResponse.create()
+									.withEntity(HttpEntities.createChunked(ContentTypes.TEXT_PLAIN_UTF8, source));
 						}
 						return NOT_FOUND;
 					}
@@ -189,7 +231,7 @@ public class Coordinator extends AbstractBehavior<Command> {
 				Http.get(context.getSystem().classicSystem()).bind(ConnectHttp.toHost(args.getWebHostname(), args.getWebPort()));
 
 		serverSource.to(Sink.foreach(c -> {
-			System.out.println("Accepted new connection from " + c.remoteAddress());
+			Log.v(TAG, String.format("Accepted new connection from %s", c.remoteAddress()));
 			c.handleWithSyncHandler(requestHandler, materializer);
 		})).run(materializer);
 	}
