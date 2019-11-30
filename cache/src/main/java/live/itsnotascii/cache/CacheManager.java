@@ -7,8 +7,10 @@ import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.receptionist.Receptionist;
+import live.itsnotascii.core.UnicodeVideo;
 import lombok.Getter;
 
+import java.io.Serializable;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -72,18 +74,27 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 		return this;
 	}
 
-	public enum VideoNotFound implements VideoFile {
+	public interface Video extends Serializable {
+	}
+
+	public static final class WrappedVideo implements Video {
+		@Getter
+		final UnicodeVideo video;
+
+		public WrappedVideo(UnicodeVideo video) {
+			this.video = video;
+		}
+	}
+
+	public enum VideoNotFound implements Video {
 		INSTANCE
 	}
 
-	public enum CacheTimedOut implements VideoFile {
+	public enum CacheTimedOut implements Video {
 		INSTANCE
 	}
 
 	public interface Command extends live.itsnotascii.core.messages.Command {
-	}
-
-	public interface VideoFile extends Command {
 	}
 
 	private static final class CachesUpdated implements Command {
@@ -122,46 +133,46 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 		@Getter
 		final long requestId;
 		@Getter
-		final VideoFile videoFile;
+		final Video video;
 
-		public RespondVideo(long requestId, VideoFile videoFile) {
+		public RespondVideo(long requestId, Video video) {
 			this.requestId = requestId;
-			this.videoFile = videoFile;
+			this.video = video;
 		}
 	}
 
-//	public enum CacheNotAvailable implements VideoFile {
+//	public enum CacheNotAvailable implements UnicodeVideo.Video {
 //		INSTANCE
 //	}
 
-	public static final class Video implements VideoFile {
-		@Getter
-		final String value;
-
-		public Video(String value) {
-			this.value = value;
-		}
-
-		@Override
-		public boolean equals(Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-
-			return this.value.equals(((Video) o).value);
-		}
-
-		@Override
-		public int hashCode() {
-			int hash = 7;
-			for (int i = 0; i < value.length(); i++) {
-				hash = hash * 31 + value.charAt(i);
-			}
-			return hash;
-		}
-
-		@Override
-		public String toString() {
-			return value + "\n";
-		}
-	}
+//	public static final class Video implements UnicodeVideo.Video {
+//		@Getter
+//		final String value;
+//
+//		public Video(String value) {
+//			this.value = value;
+//		}
+//
+//		@Override
+//		public boolean equals(Object o) {
+//			if (this == o) return true;
+//			if (o == null || getClass() != o.getClass()) return false;
+//
+//			return this.value.equals(((Video) o).value);
+//		}
+//
+//		@Override
+//		public int hashCode() {
+//			int hash = 7;
+//			for (int i = 0; i < value.length(); i++) {
+//				hash = hash * 31 + value.charAt(i);
+//			}
+//			return hash;
+//		}
+//
+//		@Override
+//		public String toString() {
+//			return value + "\n";
+//		}
+//	}
 }

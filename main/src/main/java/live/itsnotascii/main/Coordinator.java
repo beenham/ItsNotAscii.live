@@ -1,5 +1,6 @@
 package live.itsnotascii.main;
 
+import akka.NotUsed;
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.PostStop;
@@ -11,22 +12,20 @@ import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.IncomingConnection;
 import akka.http.javadsl.ServerBinding;
-import akka.http.javadsl.model.ContentTypes;
-import akka.http.javadsl.model.HttpHeader;
-import akka.http.javadsl.model.HttpMethods;
-import akka.http.javadsl.model.HttpRequest;
-import akka.http.javadsl.model.HttpResponse;
-import akka.http.javadsl.model.Uri;
+import akka.http.javadsl.model.*;
 import akka.http.javadsl.model.headers.Location;
 import akka.japi.function.Function;
 import akka.stream.Materializer;
 import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
+import akka.util.ByteString;
 import live.itsnotascii.cache.CacheManager;
 import live.itsnotascii.core.Constants;
+import live.itsnotascii.core.UnicodeVideo;
 import live.itsnotascii.core.messages.Command;
 import live.itsnotascii.util.Arguments;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletionStage;
@@ -36,7 +35,7 @@ public class Coordinator extends AbstractBehavior<Command> {
 
 	private final String id;
 	private final ActorRef<CacheManager.Command> cacheManager;
-	private final Map<Long, CacheManager.Video> responses;
+	private final Map<Long, UnicodeVideo> responses;
 
 	private Coordinator(ActorContext<Command> context, String id) {
 		super(context);
@@ -84,16 +83,16 @@ public class Coordinator extends AbstractBehavior<Command> {
 	}
 
 	private Coordinator onResponseVideo(CacheManager.RespondVideo respondVideo) {
-		if (respondVideo.getVideoFile() instanceof CacheManager.Video) {
-			CacheManager.Video video = (CacheManager.Video) respondVideo.getVideoFile();
-			responses.put(respondVideo.getRequestId(), video);
+		if (respondVideo.getVideo() instanceof CacheManager.WrappedVideo) {
+			CacheManager.WrappedVideo wrappedVideo = (CacheManager.WrappedVideo) respondVideo.getVideo();
+			responses.put(respondVideo.getRequestId(), wrappedVideo.getVideo());
 			getContext().getSystem().log().info("Cache Video Response received video with request ID {}", respondVideo.getRequestId());
-			getContext().getSystem().log().info("Video: " + video.getValue());
+			getContext().getSystem().log().info("Video: " + String.join(", ", wrappedVideo.getVideo().getFrames()));
 		} else {
 			responses.put(respondVideo.getRequestId(), null);
-			if (respondVideo.getVideoFile() instanceof CacheManager.VideoNotFound) {
+			if (respondVideo.getVideo() instanceof CacheManager.VideoNotFound) {
 				getContext().getSystem().log().info("Cache Video Response for request ID {}, VideoNotFound", respondVideo.getRequestId());
-			} else if (respondVideo.getVideoFile() instanceof CacheManager.CacheTimedOut) {
+			} else if (respondVideo.getVideo() instanceof CacheManager.CacheTimedOut) {
 				getContext().getSystem().log().info("Cache Video Response for request ID {}, Timeout", respondVideo.getRequestId());
 			} else {
 				getContext().getSystem().log().info("Cache Video Response for request ID {}, Unknown type");
@@ -162,11 +161,19 @@ public class Coordinator extends AbstractBehavior<Command> {
 									Thread.sleep(500);
 								}
 
-								CacheManager.Video video = responses.getOrDefault(requestVideo.getRequestId(), null);
+								UnicodeVideo video = responses.getOrDefault(requestVideo.getRequestId(), null);
 
 								if (video != null) {
-									return HttpResponse.create().withEntity(ContentTypes.TEXT_PLAIN_UTF8,
-											CLEAR_SCREEN + video.getValue() + "\n");
+									int FPS = 24;
+									int frameLength = video.getFrames().size();
+									long duration = frameLength < 24 ? 1 : frameLength / FPS;
+
+									Source<ByteString, NotUsed> source = Source.range(0, frameLength - 1)
+											.map(str -> ByteString.fromString(video.getFrames().get(str) + "\n"))
+											.throttle(frameLength, Duration.ofSeconds(duration * 4));
+
+									return HttpResponse.create()
+											.withEntity(HttpEntities.createChunked(ContentTypes.TEXT_PLAIN_UTF8, source));
 								} else {
 									return HttpResponse.create().withEntity(ContentTypes.TEXT_PLAIN_UTF8,
 											CLEAR_SCREEN + "Video Not Found :(\n");
