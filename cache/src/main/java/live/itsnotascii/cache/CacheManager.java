@@ -28,8 +28,8 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 		// Create listener for when a Cache component is created
 		ActorRef<Receptionist.Listing> subscriptionAdapter =
 				context.messageAdapter(Receptionist.Listing.class, listing ->
-						new CachesUpdated(listing.getServiceInstances(Cache.CACHE_SERVICE_KEY)));
-		context.getSystem().receptionist().tell(Receptionist.subscribe(Cache.CACHE_SERVICE_KEY, subscriptionAdapter));
+						new CachesUpdated(listing.getServiceInstances(Cache.SERVICE_KEY)));
+		context.getSystem().receptionist().tell(Receptionist.subscribe(Cache.SERVICE_KEY, subscriptionAdapter));
 
 		context.getLog().info("I am alive! {}", context.getSelf());
 	}
@@ -42,15 +42,8 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 	public Receive<Command> createReceive() {
 		return newReceiveBuilder()
 				.onMessage(CachesUpdated.class, this::onCachesUpdated)
-				.onMessage(Test.class, this::onReceiveTest)
 				.onMessage(RequestVideo.class, this::onRequestVideo)
 				.build();
-	}
-
-	private CacheManager onReceiveTest(Test r) {
-		getContext().getLog().info("This is the message received: {}", r.message);
-		caches.values().forEach(c -> c.tell(r));
-		return this;
 	}
 
 	private CacheManager onCachesUpdated(CachesUpdated event) {
@@ -74,7 +67,18 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 		return this;
 	}
 
+	public enum VideoNotFound implements Video {
+		INSTANCE
+	}
+
+	public enum CacheTimedOut implements Video {
+		INSTANCE
+	}
+
 	public interface Video extends Serializable {
+	}
+
+	public interface Command extends live.itsnotascii.core.messages.Command {
 	}
 
 	public static final class WrappedVideo implements Video {
@@ -86,31 +90,11 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 		}
 	}
 
-	public enum VideoNotFound implements Video {
-		INSTANCE
-	}
-
-	public enum CacheTimedOut implements Video {
-		INSTANCE
-	}
-
-	public interface Command extends live.itsnotascii.core.messages.Command {
-	}
-
 	private static final class CachesUpdated implements Command {
 		private final Set<ActorRef<Cache.Command>> newCaches;
 
 		public CachesUpdated(Set<ActorRef<Cache.Command>> caches) {
 			this.newCaches = caches;
-		}
-	}
-
-	public static class Test implements Cache.Command, Command {
-		@Getter
-		private String message;
-
-		public Test(String message) {
-			this.message = message;
 		}
 	}
 
@@ -140,39 +124,4 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 			this.video = video;
 		}
 	}
-
-//	public enum CacheNotAvailable implements UnicodeVideo.Video {
-//		INSTANCE
-//	}
-
-//	public static final class Video implements UnicodeVideo.Video {
-//		@Getter
-//		final String value;
-//
-//		public Video(String value) {
-//			this.value = value;
-//		}
-//
-//		@Override
-//		public boolean equals(Object o) {
-//			if (this == o) return true;
-//			if (o == null || getClass() != o.getClass()) return false;
-//
-//			return this.value.equals(((Video) o).value);
-//		}
-//
-//		@Override
-//		public int hashCode() {
-//			int hash = 7;
-//			for (int i = 0; i < value.length(); i++) {
-//				hash = hash * 31 + value.charAt(i);
-//			}
-//			return hash;
-//		}
-//
-//		@Override
-//		public String toString() {
-//			return value + "\n";
-//		}
-//	}
 }
