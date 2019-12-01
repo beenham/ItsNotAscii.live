@@ -73,14 +73,16 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 
 		getContext().getLog().info("Video Response Cache Query");
 
-		if (wrappedVideo.video == null) {
-			requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
-		} else if (wrappedVideo.video.getFrames() != null) {
+		if (wrappedVideo.video != null && wrappedVideo.video.getFrames() != null) {
 			requester.tell(new CacheManager.RespondVideo(requestId, wrappedVideo));
 			getContext().getLog().debug("Cache Query Found Video for request ID {}", r.response.requestId);
+
+			getContext().stop(getContext().getSelf());
 		} else if (stillWaiting.isEmpty()) {
 			requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
 			getContext().getLog().info("stillWaiting is empty for request ID {}", r.response.requestId);
+
+			getContext().stop(getContext().getSelf());
 		}
 
 		return this;
@@ -99,6 +101,8 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 	private Behavior<Command> onCollectionTimeout(CollectionTimeout timeout) {
 		getContext().getLog().info("Timeout");
 		requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.CacheTimedOut.INSTANCE));
+
+		getContext().stop(getContext().getSelf());
 		return this;
 	}
 

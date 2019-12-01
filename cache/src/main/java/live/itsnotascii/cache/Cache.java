@@ -25,10 +25,11 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class Cache extends AbstractBehavior<Cache.Command> {
 	public static final ServiceKey<Command> SERVICE_KEY = ServiceKey.create(Command.class, "Cache");
-	public static final List<String> INTERNAL_VIDEOS = Arrays.asList("thetragedy");
+	public static final List<String> INTERNAL_VIDEOS = Arrays.asList("thetragedy", "test");
 	private static final String TAG = Cache.class.getCanonicalName();
 	private final String id;
 	private Map<String, UnicodeVideo> cachedVideos;
@@ -37,6 +38,10 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 		super(context);
 		this.id = id;
 		cachedVideos = new HashMap<>();
+
+		List<byte[]> byteList = Arrays.asList("This", "is", "a", "test").stream().map(s -> s.getBytes()).collect(Collectors.toList());;
+		UnicodeVideo unicodeVideo = new UnicodeVideo("test", byteList);
+		cachedVideos.put("test", unicodeVideo);
 
 		context.getLog().info("I am alive! {}", context.getSelf());
 		context.getSystem().receptionist().tell(Receptionist.register(SERVICE_KEY, context.getSelf().narrow()));
