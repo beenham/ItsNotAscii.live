@@ -13,6 +13,7 @@
         <module>Core</module>
         <module>Cache</module>
         <module>Main</module>
+        <module>Video-Processor</module>
     </modules>
 
     <properties>

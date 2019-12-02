@@ -23,20 +23,20 @@ import live.itsnotascii.core.Constants;
 import live.itsnotascii.core.messages.Command;
 import live.itsnotascii.core.messages.JoinCluster;
 import live.itsnotascii.util.Arguments;
+import live.itsnotascii.util.Log;
 
 import java.util.Collections;
 import java.util.concurrent.CompletionStage;
 
 public class Coordinator extends AbstractBehavior<Command> {
+	private static final String TAG = Coordinator.class.getCanonicalName();
 	private final String id;
 
 	private Coordinator(ActorContext<Command> context, String id) {
 		super(context);
 		this.id = id;
-		context.getLog().info("Listener {} started", this.id);
-
+		Log.i(TAG, String.format("Listener (%s) started", getContext().getSelf()));
 		context.spawn(Cache.create("Cache"), "Cache");
-
 		setupHttpListener();
 	}
 
@@ -53,7 +53,7 @@ public class Coordinator extends AbstractBehavior<Command> {
 	}
 
 	private Coordinator onPostStop() {
-		getContext().getLog().info("Listener {} stopped.", this.id);
+		Log.i(TAG, String.format("Listener %s stopped.", this.id));
 		return this;
 	}
 
@@ -93,7 +93,7 @@ public class Coordinator extends AbstractBehavior<Command> {
 				Http.get(context.getSystem().classicSystem()).bind(ConnectHttp.toHost(args.getWebHostname(), args.getWebPort()));
 
 		serverSource.to(Sink.foreach(c -> {
-			System.out.println("Accepted new connection from " + c.remoteAddress());
+			Log.v(TAG, String.format("Accepted new connection from %s", c.remoteAddress()));
 			c.handleWithSyncHandler(requestHandler, materializer);
 		})).run(materializer);
 	}

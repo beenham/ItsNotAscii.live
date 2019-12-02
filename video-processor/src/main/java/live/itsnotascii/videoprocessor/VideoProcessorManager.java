@@ -7,6 +7,7 @@ import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.receptionist.Receptionist;
+import live.itsnotascii.core.UnicodeVideo;
 import live.itsnotascii.util.Log;
 import lombok.Getter;
 
@@ -23,17 +24,21 @@ import java.util.stream.Collectors;
 public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManager.Command> {
 	private static final String TAG = VideoProcessorManager.class.getCanonicalName();
 
-	private final Map<Request, ActorRef<VideoProcessor.Command>> workingRequests;
+	private final Map<Long, Request> requests;
+	private final Map<Long, ActorRef<VideoProcessor.Command>> workingRequests;
 	private final Map<String, ActorRef<VideoProcessor.Command>> videoProcessors;
 	private final Set<ActorRef<VideoProcessor.Command>> workingVideoProcessors;
-	private final List<Request> pendingRequests;
+	private final List<Long> pendingRequests;
 
 	private VideoProcessorManager(ActorContext<Command> context) {
 		super(context);
 		this.videoProcessors = new HashMap<>();
+		this.requests = new HashMap<>();
 		this.workingRequests = new HashMap<>();
 		this.workingVideoProcessors = new HashSet<>();
 		this.pendingRequests = new ArrayList<>();
+
+		Log.i(TAG, String.format("I'm alive! (%s)", context.getSelf()));
 
 		//	Create listener for when a VideoProcessor joins the cluster
 		ActorRef<Receptionist.Listing> subscriptionAdapter =
@@ -61,7 +66,7 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 				.collect(Collectors.toSet());
 
 		if (unavailableWorking.size() > 0) {
-			List<Request> newPending = workingRequests.keySet().parallelStream()
+			List<Long> newPending = workingRequests.keySet().parallelStream()
 					.filter(r -> unavailableWorking.contains(workingRequests.get(r)))
 					.collect(Collectors.toList());
 			newPending.parallelStream().forEach(workingRequests::remove);
@@ -70,7 +75,7 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 					.filter(Predicate.not(workingVideoProcessors::contains))
 					.collect(Collectors.toList());
 
-			processPending(newPending, available);
+			processPending(pendingRequests, available);
 			pendingRequests.addAll(newPending);
 		}
 
@@ -85,11 +90,12 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 			processPending(pendingRequests, available);
 		}
 
-		Log.i(TAG, String.format("List of Video Processors Register: %s", command.newVideoProcessors));
+		Log.i(TAG, String.format("List of Video Processors Registered: %s", command.newVideoProcessors));
 		return this;
 	}
 
 	private VideoProcessorManager onVideoRequest(Request r) {
+		Log.v(TAG, String.format("Request #%s received for %s (%s)", r.id, r.url, r.code));
 		List<ActorRef<VideoProcessor.Command>> available = videoProcessors.values().parallelStream()
 				.filter(Predicate.not(workingVideoProcessors::contains))
 				.collect(Collectors.toList());
@@ -98,29 +104,32 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 			ActorRef<VideoProcessor.Command> worker = available.get(0);
 			sendRequest(r, worker);
 		} else {
-			pendingRequests.add(r);
+			pendingRequests.add(r.id);
 		}
 
 		return this;
 	}
 
 	private VideoProcessorManager onVideoResponse(WrappedRespondVideo r) {
-		ActorRef<VideoProcessor.Command> worker = workingRequests.remove(r.response.getRequest());
+		ActorRef<VideoProcessor.Command> worker = workingRequests.remove(r.response.getRequest().id);
+		requests.remove(r.response.getRequest().id);
+		pendingRequests.remove(r.response.getRequest().id);
 		workingVideoProcessors.remove(worker);
+		r.response.getRequest().replyTo.tell(new Response(r.response.getRequest().id, r.response.getVideo()));
 
 		Log.v(TAG, String.format("Response for #%s received", r.response.getRequest().id));
 
 		if (pendingRequests.size() > 0)
-			sendRequest(pendingRequests.remove(0), worker);
+			sendRequest(requests.get(pendingRequests.remove(0)), worker);
 
 		return this;
 	}
 
 
-	private void processPending(List<Request> pending, List<ActorRef<VideoProcessor.Command>> avail) {
+	private void processPending(List<Long> pending, List<ActorRef<VideoProcessor.Command>> avail) {
 		while (pending.size() > 0 && avail.size() > 0) {
 			ActorRef<VideoProcessor.Command> worker = avail.remove(0);
-			Request r = pending.remove(0);
+			Request r = requests.get(pending.remove(0));
 			sendRequest(r, worker);
 		}
 	}
@@ -129,13 +138,14 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 		ActorRef<VideoProcessor.RespondVideo> respondVideoAdapter =
 				getContext().messageAdapter(VideoProcessor.RespondVideo.class, WrappedRespondVideo::new);
 		worker.tell(new VideoProcessor.GetVideo(r, respondVideoAdapter));
-		workingRequests.put(r, worker);
+		workingRequests.put(r.id, worker);
 		workingVideoProcessors.add(worker);
 
 		Log.v(TAG, String.format("Sending request #%s to %s", r.id, worker));
 	}
 
-	public interface Command extends live.itsnotascii.core.messages.Command {}
+	public interface Command extends live.itsnotascii.core.messages.Command {
+	}
 
 	private static final class VideoProcessorsUpdated implements Command {
 		private final Set<ActorRef<VideoProcessor.Command>> newVideoProcessors;
@@ -146,17 +156,25 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 	}
 
 	public static final class Request implements Command, Serializable {
-		@Getter
-		private final long id;
-		@Getter
-		private final String url;
-		@Getter
-		private final String code;
+		@Getter private final ActorRef<Response> replyTo;
+		@Getter private final long id;
+		@Getter private final String url, code;
 
-		public Request(long id, String url, String code) {
+		public Request(ActorRef<Response> replyTo, long id, String url, String code) {
+			this.replyTo = replyTo;
 			this.id = id;
 			this.url = url;
 			this.code = code;
+		}
+	}
+
+	public static final class Response implements Command {
+		@Getter private final long id;
+		@Getter private final UnicodeVideo video;
+
+		private Response(long id, UnicodeVideo video) {
+			this.id = id;
+			this.video = video;
 		}
 	}
 

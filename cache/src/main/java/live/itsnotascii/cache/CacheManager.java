@@ -8,6 +8,7 @@ import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.receptionist.Receptionist;
 import live.itsnotascii.core.UnicodeVideo;
+import live.itsnotascii.util.Log;
 import lombok.Getter;
 
 import java.io.Serializable;
@@ -17,6 +18,8 @@ import java.util.Map;
 import java.util.Set;
 
 public class CacheManager extends AbstractBehavior<CacheManager.Command> {
+	private static final String TAG = CacheManager.class.getCanonicalName();
+
 	private final String id;
 	private final Map<String, ActorRef<Cache.Command>> caches;
 
@@ -25,13 +28,13 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 		this.id = id;
 		this.caches = new HashMap<>();
 
+		Log.i(TAG, String.format("I'm alive! (%s)", context.getSelf()));
+
 		// Create listener for when a Cache component is created
 		ActorRef<Receptionist.Listing> subscriptionAdapter =
 				context.messageAdapter(Receptionist.Listing.class, listing ->
 						new CachesUpdated(listing.getServiceInstances(Cache.SERVICE_KEY)));
 		context.getSystem().receptionist().tell(Receptionist.subscribe(Cache.SERVICE_KEY, subscriptionAdapter));
-
-		context.getLog().info("I am alive! {}", context.getSelf());
 	}
 
 	public static Behavior<Command> create(String id) {
@@ -42,20 +45,21 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 	public Receive<Command> createReceive() {
 		return newReceiveBuilder()
 				.onMessage(CachesUpdated.class, this::onCachesUpdated)
-				.onMessage(RequestVideo.class, this::onRequestVideo)
+				.onMessage(Request.class, this::onRequestVideo)
 				.build();
 	}
 
-	private CacheManager onCachesUpdated(CachesUpdated event) {
+	private CacheManager onCachesUpdated(CachesUpdated command) {
 		caches.clear();
-		event.newCaches.forEach(c -> caches.put(c.path().name(), c));
-		getContext().getLog().info("List of services registered with the receptionist changed: {}", event.newCaches);
+		command.newCaches.forEach(c -> caches.put(c.path().name(), c));
+
+		Log.i(TAG, String.format("List of Caches Registered: %s", command.newCaches));
 		return this;
 	}
 
-	private CacheManager onRequestVideo(RequestVideo request) {
+	private CacheManager onRequestVideo(Request request) {
 		if (caches.size() == 0) {
-			request.replyTo.tell(new RespondVideo(request.requestId, null));
+			request.replyTo.tell(new Response(request.id, null));
 		}
 
 		Map<String, ActorRef<Cache.Command>> cacheIdToActorCopy = new HashMap<>(this.caches);
@@ -63,7 +67,7 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 		getContext()
 				.spawnAnonymous(
 						CacheQuery.create(
-								cacheIdToActorCopy, request.requestId, request.replyTo, request.videoCode, Duration.ofSeconds(3)));
+								cacheIdToActorCopy, request.id, request.replyTo, request.videoCode, Duration.ofSeconds(3)));
 		return this;
 	}
 
@@ -98,29 +102,26 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 		}
 	}
 
-	public static final class RequestVideo implements CacheQuery.Command, Command {
-		private static long uniqueRequestId = 0;
-		@Getter
-		final long requestId;
-		final ActorRef<RespondVideo> replyTo;
-		@Getter
-		final String videoCode;
+	public static final class Request implements Command {
+		private final ActorRef<Response> replyTo;
+		private final long id;
+		private final String videoCode;
 
-		public RequestVideo(ActorRef<RespondVideo> replyTo, String videoCode) { //, String groupId) {
-			this.requestId = uniqueRequestId++;
+		public Request(ActorRef<Response> replyTo, long id, String videoCode) {
+			this.id = id;
 			this.replyTo = replyTo;
 			this.videoCode = videoCode;
 		}
 	}
 
-	public static final class RespondVideo implements Command {
+	public static final class Response implements Command {
 		@Getter
-		final long requestId;
+		final long id;
 		@Getter
 		final Video video;
 
-		public RespondVideo(long requestId, Video video) {
-			this.requestId = requestId;
+		public Response(long id, Video video) {
+			this.id = id;
 			this.video = video;
 		}
 	}

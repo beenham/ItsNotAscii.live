@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 
 public class Cache extends AbstractBehavior<Cache.Command> {
 	public static final ServiceKey<Command> SERVICE_KEY = ServiceKey.create(Command.class, "Cache");
-	public static final List<String> INTERNAL_VIDEOS = Arrays.asList("thetragedy", "test");
+	public static final List<String> INTERNAL_VIDEOS = Arrays.asList("thetragedy");
 	private static final String TAG = Cache.class.getCanonicalName();
 	private final String id;
 	private Map<String, UnicodeVideo> cachedVideos;
@@ -38,12 +38,7 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 		super(context);
 		this.id = id;
 		cachedVideos = new HashMap<>();
-
-		List<byte[]> byteList = Arrays.asList("This", "is", "a", "test").stream().map(s -> s.getBytes()).collect(Collectors.toList());;
-		UnicodeVideo unicodeVideo = new UnicodeVideo("test", byteList);
-		cachedVideos.put("test", unicodeVideo);
-
-		context.getLog().info("I am alive! {}", context.getSelf());
+		Log.i(TAG, String.format("I'm alive! (%s)", context.getSelf()));
 		context.getSystem().receptionist().tell(Receptionist.register(SERVICE_KEY, context.getSelf().narrow()));
 	}
 
@@ -68,7 +63,7 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 	}
 
 	private Behavior<Command> onPostStop() {
-		getContext().getLog().info("Cache actor {} stopped", this);
+		Log.i(TAG, String.format("Cache actor %s stopped", getContext().getSelf()));
 		return Behaviors.stopped();
 	}
 

@@ -7,6 +7,7 @@ import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import akka.actor.typed.javadsl.TimerScheduler;
+import live.itsnotascii.util.Log;
 
 import java.time.Duration;
 import java.util.HashSet;
@@ -14,15 +15,16 @@ import java.util.Map;
 import java.util.Set;
 
 public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
+	private static final String TAG = CacheQuery.class.getCanonicalName();
 
 	private final long requestId;
-	private final ActorRef<CacheManager.RespondVideo> requester;
+	private final ActorRef<CacheManager.Response> requester;
 	private final Set<String> stillWaiting;
 
 	private CacheQuery(
 			Map<String, ActorRef<Cache.Command>> cacheIdToActor,
 			long requestId,
-			ActorRef<CacheManager.RespondVideo> requester,
+			ActorRef<CacheManager.Response> requester,
 			String videoCode,
 			Duration timeout,
 			ActorContext<Command> context,
@@ -48,7 +50,7 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 	public static Behavior<Command> create(
 			Map<String, ActorRef<Cache.Command>> cacheIdToActor,
 			long requestId,
-			ActorRef<CacheManager.RespondVideo> requester,
+			ActorRef<CacheManager.Response> requester,
 			String videoCode,
 			Duration timeout) {
 		return Behaviors.setup(context ->
@@ -71,16 +73,18 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 		stillWaiting.remove(r.response.cacheId);
 		CacheManager.WrappedVideo wrappedVideo = r.response.video;
 
-		getContext().getLog().info("Video Response Cache Query");
-
+		Log.v(TAG, String.format("%s: Video response for #%s from cache %s", getContext().getSelf(),
+				r.response.requestId, r.response.cacheId));
 		if (wrappedVideo.video != null && wrappedVideo.video.getFrames() != null) {
-			requester.tell(new CacheManager.RespondVideo(requestId, wrappedVideo));
-			getContext().getLog().debug("Cache Query Found Video for request ID {}", r.response.requestId);
+			requester.tell(new CacheManager.Response(requestId, wrappedVideo));
+			Log.v(TAG, String.format("%s: Cache %s Found Video for #%s", getContext().getSelf(),
+					r.response.cacheId, r.response.requestId));
 
 			return Behaviors.stopped();
 		} else if (stillWaiting.isEmpty()) {
-			requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
-			getContext().getLog().info("stillWaiting is empty for request ID {}", r.response.requestId);
+			requester.tell(new CacheManager.Response(requestId, CacheManager.VideoNotFound.INSTANCE));
+			Log.v(TAG, String.format("%s: Still waiting is empty for #%s", getContext().getSelf(),
+					r.response.requestId));
 
 			return Behaviors.stopped();
 		}
@@ -89,16 +93,21 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 	}
 
 	private Behavior<Command> onCacheTerminated(CacheTerminated terminated) {
-		getContext().getLog().info("Cache terminated");
-		requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
-		return Behaviors.stopped();
+		stillWaiting.remove(terminated.cacheId);
+		Log.v(TAG, String.format("%s: Cache (%s) Terminated", getContext().getSelf(), terminated.cacheId));
+
+		if (stillWaiting.isEmpty()) {
+			requester.tell(new CacheManager.Response(requestId, CacheManager.VideoNotFound.INSTANCE));
+			getContext().stop(getContext().getSelf());
+		}
+		return this;
 	}
 
 	private Behavior<Command> onCollectionTimeout(CollectionTimeout timeout) {
-		getContext().getLog().info("Timeout");
-		requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.CacheTimedOut.INSTANCE));
-
-		return Behaviors.stopped();
+		Log.v(TAG, String.format("%s: Timeout Reached.", getContext().getSelf()));
+		requester.tell(new CacheManager.Response(requestId, CacheManager.CacheTimedOut.INSTANCE));
+		getContext().stop(getContext().getSelf());
+		return this;
 	}
 
 	private enum CollectionTimeout implements Command {

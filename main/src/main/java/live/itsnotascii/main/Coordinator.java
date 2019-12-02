@@ -34,6 +34,7 @@ import live.itsnotascii.core.messages.Command;
 import live.itsnotascii.core.messages.HttpResponses;
 import live.itsnotascii.util.Arguments;
 import live.itsnotascii.util.Log;
+import live.itsnotascii.videoprocessor.VideoProcessorManager;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -47,15 +48,20 @@ public class Coordinator extends AbstractBehavior<Command> {
 
 	private final String id;
 	private final ActorRef<CacheManager.Command> cacheManager;
+	private final ActorRef<VideoProcessorManager.Command> videoProcessorManager;
+
+	private final Map<Long, VideoRequest> pendingRequests;
 	private final Map<Long, UnicodeVideo> responses;
 
 	private Coordinator(ActorContext<Command> context, String id) {
 		super(context);
 		this.id = id;
+		this.pendingRequests = new HashMap<>();
 		this.responses = new HashMap<>();
-		context.getLog().info("I am alive! {}", context.getSelf());
+		Log.i(TAG, String.format("Listener (%s) started", getContext().getSelf()));
 
 		this.cacheManager = context.spawn(CacheManager.create("CacheManager"), "CacheManager");
+		this.videoProcessorManager = context.spawn(VideoProcessorManager.create(), "VideoProcessorManager");
 
 		setupHttpListener();
 	}
@@ -68,8 +74,9 @@ public class Coordinator extends AbstractBehavior<Command> {
 	public Receive<Command> createReceive() {
 		return newReceiveBuilder()
 				.onMessage(RegisterRequest.class, this::onRegisterRequest)
-				.onMessage(CacheManager.RespondVideo.class, this::onResponseVideo)
-				.onMessage(CacheManager.RequestVideo.class, this::onRequestVideo)
+				.onMessage(VideoRequest.class, this::onVideoRequest)
+				.onMessage(CacheManager.Response.class, this::onCacheResponse)
+				.onMessage(VideoProcessorManager.Response.class, this::onVideoResponse)
 				.onSignal(PostStop.class, s -> onPostStop())
 				.build();
 	}
@@ -87,32 +94,37 @@ public class Coordinator extends AbstractBehavior<Command> {
 		return this;
 	}
 
-	private Coordinator onResponseVideo(CacheManager.RespondVideo respondVideo) {
-		if (respondVideo.getVideo() instanceof CacheManager.WrappedVideo) {
-			CacheManager.WrappedVideo wrappedVideo = (CacheManager.WrappedVideo) respondVideo.getVideo();
-			responses.put(respondVideo.getRequestId(), wrappedVideo.getVideo());
-			getContext().getLog().info("Cache Video Response received video for #{}", respondVideo.getRequestId());
-		} else {
-			responses.put(respondVideo.getRequestId(), null);
-			if (respondVideo.getVideo() instanceof CacheManager.VideoNotFound) {
-				getContext().getLog().info("Cache Video Response for #{}, VideoNotFound", respondVideo.getRequestId());
-			} else if (respondVideo.getVideo() instanceof CacheManager.CacheTimedOut) {
-				getContext().getLog().info("Cache Video Response for #{}, Timeout", respondVideo.getRequestId());
-			} else {
-				getContext().getLog().info("Cache Video Response is Unknown type");
-			}
-		}
-
+	private Coordinator onVideoRequest(VideoRequest r) {
+		this.pendingRequests.put(r.id, r);
+		this.cacheManager.tell(new CacheManager.Request(getContext().getSelf().narrow(), r.id, r.code));
 		return this;
 	}
 
-	private Coordinator onRequestVideo(CacheManager.RequestVideo requestVideo) {
-		this.cacheManager.tell(requestVideo);
+	private Coordinator onCacheResponse(CacheManager.Response r) {
+		if (r.getVideo() instanceof CacheManager.WrappedVideo) {
+			CacheManager.WrappedVideo video = (CacheManager.WrappedVideo) r.getVideo();
+			pendingRequests.remove(r.getId());
+			responses.put(r.getId(), video.getVideo());
+			Log.v(TAG, String.format("Received response #%s from CacheManager", r.getId()));
+		} else if (r.getVideo() instanceof CacheManager.VideoNotFound) {
+			VideoRequest request = pendingRequests.get(r.getId());
+			Log.v(TAG, String.format("Received response #%s from CacheManager (NOT FOUND)", r.getId()));
+			this.videoProcessorManager.tell(new VideoProcessorManager.Request(getContext().getSelf().narrow(),
+					request.id, request.url, request.code));
+		}
+		return this;
+	}
+
+	private Coordinator onVideoResponse(VideoProcessorManager.Response r) {
+		pendingRequests.remove(r.getId());
+		responses.put(r.getId(), r.getVideo());
+		Log.v(TAG, String.format("Received response #%s (%s) from VideoProcessorManager",
+				r.getId(), r.getVideo() != null ? r.getVideo().getName() : null));
 		return this;
 	}
 
 	private Coordinator onPostStop() {
-		getContext().getLog().info("Listener {} stopped.", this.id);
+		Log.i(TAG, String.format("Listener %s stopped.", this.id));
 		return this;
 	}
 
@@ -158,50 +170,42 @@ public class Coordinator extends AbstractBehavior<Command> {
 							if (uri.path().equals("/")) {
 								return WELCOME;
 							} else if (Cache.INTERNAL_VIDEOS.contains(uri.path().substring(1))) {
-								return getHttpResponse(new CacheManager.RequestVideo(
-										getContext().getSelf().narrow(), uri.path().substring(1)));
+								String videoCode = uri.path().substring(1);
+								return getHttpResponse(
+										new VideoRequest(String.format("internal/%s", videoCode), videoCode));
 							} else if (uri.path().startsWith("/")) {
 								String input = uri.path().substring(1);
-								getContext().getLog().info("HTTP Video Request {}", input);
 
 								if (uri.query().get("v").isPresent()) {
 									input += "?v=" + uri.query().get("v").get();
 								}
 
-								String url;
-								String videoCode;
-
+								String videoUrl, videoCode;
 								Matcher matcher = Regex.YOUTUBE_LINK.matcher(input);
 
 								if (matcher.find()) {
 									videoCode = matcher.group("link");
-									url = "https://youtube.com/watch?v=" + videoCode;
-
-									Log.v(TAG, String.format("Input %s - %s (link) > %s (code)", uri, url, videoCode));
+									videoUrl = "https://youtube.com/watch?v=" + videoCode;
 								} else if ((matcher = Regex.VIDEO_CODE.matcher(input)).find()) {
 									videoCode = matcher.group();
-									url = "https://youtube.com/watch?v=" + videoCode;
-
-									Log.v(TAG, String.format("Input %s - %s (link) > %s (code)", uri, url, videoCode));
+									videoUrl = "https://youtube.com/watch?v=" + videoCode;
 								} else {
 									return INVALID_LINK;
 								}
 
-								CacheManager.RequestVideo requestVideo =
-										new CacheManager.RequestVideo(getContext().getSelf().narrow(), videoCode);
-
-								return getHttpResponse(requestVideo);
+								Log.v(TAG, String.format("Request: %s (link) > %s (code)", videoUrl, videoCode));
+								return getHttpResponse(new VideoRequest(videoUrl, videoCode));
 							}
 						}
 						return NOT_FOUND;
 					}
 
-					private HttpResponse getHttpResponse(CacheManager.RequestVideo req) {
+					private HttpResponse getHttpResponse(VideoRequest req) {
 						context.getSelf().tell(req);
 
 						long requestTime = System.currentTimeMillis();
 						long currentTime = System.currentTimeMillis();
-						while (!responses.containsKey(req.getRequestId()) && 10000 > currentTime - requestTime) {
+						while (!responses.containsKey(req.id) && 15000 > currentTime - requestTime) {
 							currentTime = System.currentTimeMillis();
 							try {
 								Thread.sleep(500);
@@ -209,7 +213,7 @@ public class Coordinator extends AbstractBehavior<Command> {
 							}
 						}
 
-						UnicodeVideo video = responses.getOrDefault(req.getRequestId(), null);
+						UnicodeVideo video = responses.getOrDefault(req.id, null);
 
 						if (video != null) {
 							int FPS = 24;
@@ -243,6 +247,19 @@ public class Coordinator extends AbstractBehavior<Command> {
 		public RegisterRequest(String sender, String location) {
 			this.sender = sender;
 			this.location = location;
+		}
+	}
+
+	private static class VideoRequest implements Command {
+		private static long uniqueRequestId = 0;
+		private final long id;
+		private final String url;
+		private final String code;
+
+		private VideoRequest(String url, String code) {
+			this.id = uniqueRequestId++;
+			this.url = url;
+			this.code = code;
 		}
 	}
 }
