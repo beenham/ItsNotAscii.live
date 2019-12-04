@@ -32,9 +32,9 @@ import live.itsnotascii.core.Regex;
 import live.itsnotascii.core.UnicodeVideo;
 import live.itsnotascii.core.messages.Command;
 import live.itsnotascii.core.messages.HttpResponses;
+import live.itsnotascii.processor.video.VideoProcessorManager;
 import live.itsnotascii.util.Arguments;
 import live.itsnotascii.util.Log;
-import live.itsnotascii.videoprocessor.VideoProcessorManager;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -44,7 +44,6 @@ import java.util.regex.Matcher;
 
 public class Coordinator extends AbstractBehavior<Command> {
 	private static final String TAG = Coordinator.class.getCanonicalName();
-	private static final String CLEAR_SCREEN = "\u001B[2J\u001B[H";
 
 	private final String id;
 	private final ActorRef<CacheManager.Command> cacheManager;
@@ -118,6 +117,9 @@ public class Coordinator extends AbstractBehavior<Command> {
 	private Coordinator onVideoResponse(VideoProcessorManager.Response r) {
 		pendingRequests.remove(r.getId());
 		responses.put(r.getId(), r.getVideo());
+		if (r.getVideo() != null) {
+			cacheManager.tell(new Cache.StoreVideo(r.getVideo()));
+		}
 		Log.v(TAG, String.format("Received response #%s (%s) from VideoProcessorManager",
 				r.getId(), r.getVideo() != null ? r.getVideo().getName() : null));
 		return this;
@@ -137,15 +139,15 @@ public class Coordinator extends AbstractBehavior<Command> {
 				new Function<>() {
 					private final HttpResponse NOT_FOUND = HttpResponse.create()
 							.withStatus(404)
-							.withEntity(CLEAR_SCREEN + "\n" + HttpResponses.NOT_FOUND);
+							.withEntity(Constants.CLEAR_SCREEN + HttpResponses.NOT_FOUND);
 
 					private final HttpResponse INVALID_LINK = HttpResponse.create()
 							.withStatus(404)
-							.withEntity(CLEAR_SCREEN + "\n" + HttpResponses.INVALID_URL);
+							.withEntity(Constants.CLEAR_SCREEN + HttpResponses.INVALID_URL);
 
 					private final HttpResponse WELCOME = HttpResponse.create()
 							.withStatus(404)
-							.withEntity(CLEAR_SCREEN + "\n" + HttpResponses.WELCOME_SCREEN);
+							.withEntity(Constants.CLEAR_SCREEN + HttpResponses.WELCOME_SCREEN);
 
 					@Override
 					public HttpResponse apply(HttpRequest req) {
