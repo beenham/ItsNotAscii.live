@@ -1,4 +1,4 @@
-package live.itsnotascii.videoprocessor;
+package live.itsnotascii.processor.video;
 
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;

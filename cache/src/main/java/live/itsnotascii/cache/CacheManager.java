@@ -46,6 +46,7 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 		return newReceiveBuilder()
 				.onMessage(CachesUpdated.class, this::onCachesUpdated)
 				.onMessage(Request.class, this::onRequestVideo)
+				.onMessage(Cache.StoreVideo.class, this::onStoreVideo)
 				.build();
 	}
 
@@ -68,6 +69,11 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 				.spawnAnonymous(
 						CacheQuery.create(
 								cacheIdToActorCopy, request.id, request.replyTo, request.videoCode, Duration.ofSeconds(3)));
+		return this;
+	}
+
+	private CacheManager onStoreVideo(Cache.StoreVideo video) {
+		caches.values().forEach(e -> e.tell(video));
 		return this;
 	}
 

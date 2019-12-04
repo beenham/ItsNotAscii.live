@@ -13,7 +13,7 @@ import live.itsnotascii.core.Constants;
 import live.itsnotascii.core.messages.Command;
 import live.itsnotascii.util.Arguments;
 import live.itsnotascii.util.Log;
-import live.itsnotascii.videoprocessor.Coordinator;
+import live.itsnotascii.processor.video.Coordinator;
 
 public class VideoProcessorMain {
 	public static void main(String... inputArgs) {

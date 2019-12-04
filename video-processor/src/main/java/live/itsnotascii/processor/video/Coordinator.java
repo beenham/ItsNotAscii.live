@@ -1,4 +1,4 @@
-package live.itsnotascii.videoprocessor;
+package live.itsnotascii.processor.video;
 
 import akka.actor.AddressFromURIString;
 import akka.actor.typed.Behavior;

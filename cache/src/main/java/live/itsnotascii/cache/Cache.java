@@ -27,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static live.itsnotascii.core.Constants.CLEAR_SCREEN;
+
 public class Cache extends AbstractBehavior<Cache.Command> {
 	public static final ServiceKey<Command> SERVICE_KEY = ServiceKey.create(Command.class, "Cache");
 	public static final List<String> INTERNAL_VIDEOS = Arrays.asList("thetragedy");
@@ -50,15 +52,22 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 	public Receive<Command> createReceive() {
 		return newReceiveBuilder()
 				.onMessage(RetrieveVideo.class, this::onRetrieveVideo)
+				.onMessage(StoreVideo.class, this::onStoreVideo)
 				.onSignal(PostStop.class, s -> onPostStop())
 				.build();
 	}
 
 	// #respond-reply
-	private Behavior<Command> onRetrieveVideo(RetrieveVideo r) {
+	private Cache onRetrieveVideo(RetrieveVideo r) {
 		Log.i(TAG, String.format("Request received for video '%s'", r.videoCode));
 		CacheManager.WrappedVideo wrappedVideo = new CacheManager.WrappedVideo(findVideo(r.videoCode));
 		r.replyTo.tell(new RespondVideo(r.requestId, id, wrappedVideo));
+		return this;
+	}
+
+	private Cache onStoreVideo(StoreVideo store) {
+		Log.i(TAG, String.format("Request received to store video '%s'", store.video));
+		storeVideo(store.video);
 		return this;
 	}
 
@@ -119,6 +128,52 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 		return cachedVideos.getOrDefault(name, null);
 	}
 
+	private void storeVideo(UnicodeVideo video) {
+		List<String> frames = video.getFrames();
+		StringBuilder sb = new StringBuilder();
+
+		int byteSize = 0;
+
+		for (String frame : frames) {
+			byte[] bytes = frame.getBytes();
+			byteSize += bytes.length + CLEAR_SCREEN.getBytes().length;
+			byteSize += String.valueOf(bytes.length).length();
+			byteSize += 2;
+
+			sb.append(bytes.length + CLEAR_SCREEN.getBytes().length)
+					.append('\n')
+					.append(CLEAR_SCREEN)
+					.append(new String(bytes))
+					.append('\n');
+		}
+
+		byte[] outBytes = new byte[byteSize];
+		int i = 0;
+		for (String frame : frames) {
+			byte[] bytes = frame.getBytes();
+			int size = bytes.length + CLEAR_SCREEN.getBytes().length;
+			for (byte b : String.valueOf(size).getBytes())
+				outBytes[i++] = b;
+			outBytes[i++] = '\n';
+			for (byte b : CLEAR_SCREEN.getBytes())
+				outBytes[i++] = b;
+			for (byte b : bytes)
+				outBytes[i++] = b;
+			outBytes[i++] = '\n';
+		}
+
+		System.out.println(Arrays.toString(outBytes));
+
+		String fileName = String.format("./videos/%s.txt", video.getName());
+		Log.i(TAG, String.format("Writing Unicode Video (%s) to file > %s", video, fileName));
+
+		try {
+			Files.write(Paths.get(fileName), sb.toString().getBytes());
+		} catch (IOException e) {
+			Log.e(TAG, String.format("Failed to file: %s", e.getMessage()));
+		}
+	}
+
 	public interface Command extends live.itsnotascii.core.messages.Command, Serializable {
 	}
 
@@ -131,6 +186,14 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 			this.requestId = requestId;
 			this.replyTo = replyTo;
 			this.videoCode = videoCode;
+		}
+	}
+
+	public static final class StoreVideo implements CacheManager.Command, Command {
+		final UnicodeVideo video;
+
+		public StoreVideo(UnicodeVideo video) {
+			this.video = video;
 		}
 	}
 

@@ -1,4 +1,4 @@
-package live.itsnotascii.videoprocessor;
+package live.itsnotascii.processor.video;
 
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
@@ -124,7 +124,6 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 
 		return this;
 	}
-
 
 	private void processPending(List<Long> pending, List<ActorRef<VideoProcessor.Command>> avail) {
 		while (pending.size() > 0 && avail.size() > 0) {
