@@ -32,17 +32,17 @@ public class Coordinator extends AbstractBehavior<Command> {
 	private static final String TAG = Coordinator.class.getCanonicalName();
 	private final String id;
 
-	private Coordinator(ActorContext<Command> context, String id) {
+	private Coordinator(ActorContext<Command> context, Behavior<VideoProcessor.Command> processor, String id) {
 		super(context);
 		this.id = id;
 
 		Log.i(TAG, String.format("Listener (%s) started", getContext().getSelf()));
-		context.spawn(VideoProcessor.create(), "VideoProcessor");
+		context.spawn(processor, "VideoProcessor");
 		setupHttpListener();
 	}
 
-	public static Behavior<Command> create(String id) {
-		return Behaviors.setup(c -> new Coordinator(c, id));
+	public static Behavior<Command> create(Behavior<VideoProcessor.Command> processor, String id) {
+		return Behaviors.setup(c -> new Coordinator(c, processor, id));
 	}
 
 	@Override

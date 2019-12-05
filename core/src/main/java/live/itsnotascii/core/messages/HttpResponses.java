@@ -1,6 +1,7 @@
 package live.itsnotascii.core.messages;
 
 public class HttpResponses {
+	// 160 * 45 ... 160 * 90
 	public static final String NOT_FOUND =
 			"╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗\n" +
 					"║                                                                                                                                                              ║\n".repeat(5) +
@@ -15,7 +16,7 @@ public class HttpResponses {
 					"║                                                              Check to make sure your url is valid!                                                           ║\n" +
 					"║                                                                                                                                                              ║\n" +
 					"║                                                          Ensure the box is in full view of the window!                                                       ║\n" +
-					"║                                                                                                                                                              ║\n".repeat(22) +
+					"║                                                                                                                                                              ║\n".repeat(27) +
 					"╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝\n";
 
 	public static final String INVALID_URL =
@@ -34,7 +35,7 @@ public class HttpResponses {
 					"║                                                                           dQw4w9WgXcQ                                                                        ║\n" +
 					"║                                                                                                                                                              ║\n" +
 					"║                                                          Ensure the box is in full view of the window!                                                       ║\n" +
-					"║                                                                                                                                                              ║\n".repeat(20) +
+					"║                                                                                                                                                              ║\n".repeat(25) +
 					"╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝\n";
 
 	public static final String WELCOME_SCREEN =
@@ -50,6 +51,6 @@ public class HttpResponses {
 					"║                                To use the service, just do 'curl itsnotascii.live/<your video link>' and watch the magic happen!                             ║\n" +
 					"║                                                                                                                                                              ║\n" +
 					"║                                                          Ensure the box is in full view of the window!                                                       ║\n" +
-					"║                                                                                                                                                              ║\n".repeat(23) +
+					"║                                                                                                                                                              ║\n".repeat(28) +
 					"╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝\n";
 }

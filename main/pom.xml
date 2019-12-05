@@ -41,7 +41,7 @@
         </dependency>
         <dependency>
             <groupId>live.itsnotascii</groupId>
-            <artifactId>video-processor</artifactId>
+            <artifactId>video-processor-core</artifactId>
             <version>1.0</version>
         </dependency>
     </dependencies>

@@ -8,7 +8,7 @@
         <groupId>live.itsnotascii</groupId>
         <version>1.0</version>
     </parent>
-    <artifactId>video-processor</artifactId>
+    <artifactId>video-processor-core</artifactId>
 
     <dependencies>
         <dependency>
@@ -30,6 +30,16 @@
             <groupId>live.itsnotascii</groupId>
             <artifactId>core</artifactId>
             <version>1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jcodec</groupId>
+            <artifactId>jcodec</artifactId>
+            <version>0.2.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jcodec</groupId>
+            <artifactId>jcodec-javase</artifactId>
+            <version>0.2.3</version>
         </dependency>
     </dependencies>
 </project>

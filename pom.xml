@@ -13,7 +13,8 @@
         <module>Core</module>
         <module>Cache</module>
         <module>Main</module>
-        <module>Video-Processor</module>
+        <module>Video-Processor-Core</module>
+        <module>Video-Processor-JCodec</module>
     </modules>
 
     <properties>
