@@ -77,12 +77,12 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 			requester.tell(new CacheManager.RespondVideo(requestId, wrappedVideo));
 			getContext().getLog().debug("Cache Query Found Video for request ID {}", r.response.requestId);
 
-			getContext().stop(getContext().getSelf());
+			return Behaviors.stopped();
 		} else if (stillWaiting.isEmpty()) {
 			requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
 			getContext().getLog().info("stillWaiting is empty for request ID {}", r.response.requestId);
 
-			getContext().stop(getContext().getSelf());
+			return Behaviors.stopped();
 		}
 
 		return this;
@@ -91,16 +91,14 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 	private Behavior<Command> onCacheTerminated(CacheTerminated terminated) {
 		getContext().getLog().info("Cache terminated");
 		requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
-		getContext().stop(getContext().getSelf());
-		return this;
+		return Behaviors.stopped();
 	}
 
 	private Behavior<Command> onCollectionTimeout(CollectionTimeout timeout) {
 		getContext().getLog().info("Timeout");
 		requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.CacheTimedOut.INSTANCE));
 
-		getContext().stop(getContext().getSelf());
-		return this;
+		return Behaviors.stopped();
 	}
 
 	private enum CollectionTimeout implements Command {
