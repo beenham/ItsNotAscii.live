@@ -12,6 +12,7 @@ import live.itsnotascii.processor.video.VideoProcessor;
 import live.itsnotascii.util.Log;
 
 import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferByte;
 import java.util.Map;
 
 public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
@@ -36,10 +37,44 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 
 	private FrameProcessor onProcessFrames(ProcessFrames f) {
 		Log.v(TAG, String.format("%s Frames received for %s", f.frames.size(), f.videoCode));
-		f.frames.keySet().forEach(k -> {
+
+		/*f.frames.keySet().forEach(k -> {
 			f.replyTo.tell(new VideoProcessor.UnicodeFrame(f.videoCode, k, Constants.CLEAR_SCREEN + k.toString()));
-		});
-		// TODO
+		});*/
+
+		for (Map.Entry<Integer, BufferedImage> frame : f.frames.entrySet()) {
+			int index = frame.getKey();
+			BufferedImage image = frame.getValue();
+
+			StringBuilder builder = new StringBuilder();
+
+			int width = image.getWidth();
+			int height = image.getHeight();
+
+			byte[] pixels = ((DataBufferByte) image.getRaster().getDataBuffer()).getData();
+
+			Log.wtf(TAG, "Frame " + index);
+
+			for (int y = 0; y < height / 8; y++) {
+				for (int x = 0; x < width / 8; x++) {
+					int i = (y * width + x) * 3;
+					byte r = pixels[i];
+					byte g = pixels[i + 1];
+					byte b = pixels[i + 2];
+
+					Colors.Color color = Colors.getColor(r, g, b, Colors.ColorProfile.COLOR_PROFILE_4BIT);
+					color = Colors.mapToColorProfile(color, Colors.ColorProfile.COLOR_PROFILE_4BIT);
+
+					builder.append("\033[");
+					builder.append(Colors.ansiCode(color, Colors.ColorProfile.COLOR_PROFILE_4BIT, true));
+					builder.append("m█");
+				}
+
+				builder.append("\033[0m\n");
+
+				f.replyTo.tell(new VideoProcessor.UnicodeFrame(f.videoCode, index, Constants.CLEAR_SCREEN + builder.toString()));
+			}
+		}
 
 		return this;
 	}

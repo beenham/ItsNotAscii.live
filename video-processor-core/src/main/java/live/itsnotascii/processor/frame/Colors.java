@@ -1,6 +1,28 @@
 package live.itsnotascii.processor.frame;
 
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
 public class Colors {
+	public enum ColorProfile {
+		COLOR_PROFILE_3BIT(3),
+		COLOR_PROFILE_4BIT(4),
+		COLOR_PROFILE_8BIT(8),
+		COLOR_PROFILE_24BIT(24);
+
+		private final int colors;
+		private final int mask;
+
+		ColorProfile(int bits) {
+			this.colors = (int) Math.pow(2, bits);
+			this.mask = (0xff << (int) (7 - (Math.ceil(bits / 3f)))) & 0xff;
+		}
+	}
+
 	private static final int[] RAW_COLORS = new int[] {
 			0x000000, 0x800000, 0x008000, 0x808000, 0x000080, 0x800080, 0x008080, 0xc0c0c0,
 			0x808080, 0xff0000, 0x00ff00, 0xffff00, 0x0000ff, 0xff00ff, 0x00ffff, 0xffffff,
@@ -35,4 +57,123 @@ public class Colors {
 			0x585858, 0x626262, 0x6c6c6c, 0x767676, 0x808080, 0x8a8a8a, 0x949494, 0x9e9e9e,
 			0xa8a8a8, 0xb2b2b2, 0xbcbcbc, 0xc6c6c6, 0xd0d0d0, 0xdadada, 0xe4e4e4, 0xeeeeee,
 	};
+
+	private static final List<Color> COLORS = IntStream.range(0, RAW_COLORS.length)
+			.mapToObj(i -> new Color(i, RAW_COLORS[i]))
+			.collect(Collectors.toUnmodifiableList());
+
+	private static Map<Integer, Color> sColors = new WeakHashMap<>();
+
+	public static Color getColor(byte red, byte green, byte blue, ColorProfile profile) {
+		red &= profile.mask;
+		green &= profile.mask;
+		blue &= profile.mask;
+
+		int color = red << 16 | green << 8 | blue;
+
+		return sColors.computeIfAbsent(color, Color::new);
+	}
+
+	public static Color mapToColorProfile(Color color, ColorProfile mode) {
+		if (mode == ColorProfile.COLOR_PROFILE_24BIT) return color;
+
+		// Check if cached
+		Color mapped = color.mappedColor[mode.ordinal()];
+		if (mapped != null) return mapped;
+
+		// Map to color
+		mapped = COLORS.stream()
+				.limit(mode.colors)
+				.min(Comparator.comparingDouble(c -> c.distance(color))).orElseThrow();
+		color.mappedColor[mode.ordinal()] = mapped;
+
+		return mapped;
+	}
+
+	public static String ansiCode(Color color, ColorProfile mode, boolean foreground) {
+		if (color.index > mode.colors) throw new IllegalArgumentException("Index of color is higher than maximum in color mode");
+
+		/*return switch(mode) {
+			case COLOR_PROFILE_3BIT, COLOR_PROFILE_4BIT -> "" + (30 + (foreground ? 0 : 10) + color.index);
+			case COLOR_PROFILE_8BIT -> (foreground ? 38 : 48) + ";5;" + color.index;
+			case COLOR_PROFILE_24BIT -> (foreground ? 38 : 48) + ";2;" + color.red + ";" + color.green + ";" + color.blue;
+		};*/
+
+		switch (mode) {
+			case COLOR_PROFILE_3BIT:
+			case COLOR_PROFILE_4BIT:
+				return "" + (30 + (foreground ? 0 : 10) + color.index);
+			case COLOR_PROFILE_8BIT:
+				return (foreground ? 38 : 48) + ";5;" + color.index;
+			case COLOR_PROFILE_24BIT:
+				return (foreground ? 38 : 48) + ";2;" + color.red + ";" + color.green + ";" + color.blue;
+		}
+		return "";
+	}
+
+	public static class Color {
+		private final int index;
+		private final byte red, green, blue;
+		private final float hue, saturation, value;
+
+		private Color[] mappedColor = new Color[3];
+
+		private Color(int rgb) {
+			this(-1, rgb);
+		}
+
+		private Color(int index, int rgb) {
+			this(index, (byte) ((rgb >> 16) & 0xff), (byte) ((rgb >> 8) & 0xff), (byte) (rgb & 0xff));
+		}
+
+		private Color(int index, byte red, byte green, byte blue) {
+			this.index = index;
+
+			int r = red & 0xff;
+			int g = green & 0xff;
+			int b = blue & 0xff;
+
+			float cMax = Math.max(r, Math.max(g, b));
+			float cMin = Math.min(r, Math.min(g, b));
+			float cRange = cMax - cMin;
+
+			this.value = cMax / 255.0f;
+			this.saturation = cMax > 0 ? cRange / cMax : 0;
+
+			if (this.saturation == 0) {
+				this.hue = 0;
+			} else {
+				float redC = (cMax - r) / cRange;
+				float greenC = (cMax - g) / cRange;
+				float blueC = (cMax - b) / cRange;
+				float h;
+				if (r == cMax) {
+					h = blueC - greenC;
+				} else if (g == cMax) {
+					h = 2.0f + redC - blueC;
+				} else {
+					h = 4.0f + greenC - redC;
+				}
+				h /= 6.0f;
+				if (h < 0) h += 1.0f;
+				this.hue = h;
+			}
+
+			this.red = (byte) r;
+			this.green = (byte) g;
+			this.blue = (byte) b;
+		}
+
+		private float distance(Color color) {
+			float distH = (float) Math.pow(
+					Math.min(Math.abs(color.hue - this.hue),
+							1f - Math.abs(color.hue - this.hue)) / 0.5f, 2);
+
+			float distS = (float) Math.pow(color.saturation - this.saturation, 2);
+
+			float distV = (float) Math.pow(color.value - this.value, 2);
+
+			return (float) Math.sqrt(5 * distH + distS + distV);
+		}
+	}
 }
