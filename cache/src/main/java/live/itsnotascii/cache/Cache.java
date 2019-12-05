@@ -116,7 +116,7 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 				frames.add(buffer);
 				// empty start of line
 				in.read();
-//				Log.v(TAG, String.format("Target length: %s | Actual length: %s", len, new String(buffer).length()));
+// 			Log.v(TAG, String.format("Target length: %s | Actual length: %s", len, new String(buffer).length()));
 				len = 0;
 			}
 

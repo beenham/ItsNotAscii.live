@@ -31,11 +31,11 @@ public class VideoProcessorMain {
 
 		Config cfg = CommonMain.loadConfig();
 
-		//	Creating Actor System
+		// Creating Actor System
 		ActorSystem<Command> system = ActorSystem.create(Coordinator.create("Listener"),
 				args.getName(), ConfigFactory.parseMap(args.getOverrides()).withFallback(cfg));
 
-		//	Sending http request to target
+		// Sending http request to target
 		Http http = Http.get(system.classicSystem());
 		HttpRequest request = HttpRequest.create()
 				.withUri(Uri.create(args.getTarget()))

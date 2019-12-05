@@ -28,7 +28,7 @@ public abstract class CommonMain {
 			commander.parse(inputArgs);
 			Arguments args = Arguments.get();
 
-			//	font: ANSI Shadow
+			// font: ANSI Shadow
 			Log.wtf("MAIN", "\n\n" + TITLE + "\n\n" + (subTitle == null ? "" : subTitle + "\n\n") + args);
 
 			return args;

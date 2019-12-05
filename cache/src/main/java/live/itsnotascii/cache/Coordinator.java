@@ -70,7 +70,7 @@ public class Coordinator extends AbstractBehavior<Command> {
 		Arguments args = Arguments.get();
 		ActorContext<Command> context = getContext();
 
-		//	Setting up HTTP Listener
+		// Setting up HTTP Listener
 		final Materializer materializer = Materializer.createMaterializer(context.getSystem());
 		final Function<HttpRequest, HttpResponse> requestHandler =
 				new Function<>() {

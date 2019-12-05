@@ -40,7 +40,7 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 
 		Log.i(TAG, String.format("I'm alive! (%s)", context.getSelf()));
 
-		//	Create listener for when a VideoProcessor joins the cluster
+		// Create listener for when a VideoProcessor joins the cluster
 		ActorRef<Receptionist.Listing> subscriptionAdapter =
 				context.messageAdapter(Receptionist.Listing.class, listing ->
 						new VideoProcessorsUpdated(listing.getServiceInstances(VideoProcessor.SERVICE_KEY)));

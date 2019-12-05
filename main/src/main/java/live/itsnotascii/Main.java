@@ -20,11 +20,11 @@ public class Main {
 
 		Config cfg = CommonMain.loadConfig();
 
-		//	Creating Actor System
+		// Creating Actor System
 		ActorSystem<Command> system = ActorSystem.create(Coordinator.create("MainCoordinator"),
 				args.getName(), ConfigFactory.parseMap(args.getOverrides()).withFallback(cfg));
 
-		//	Initializing cluster
+		// Initializing cluster
 		Cluster cluster = Cluster.get(system);
 		cluster.manager().tell(Join.create(cluster.selfMember().address()));
 	}

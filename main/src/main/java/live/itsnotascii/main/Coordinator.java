@@ -133,7 +133,7 @@ public class Coordinator extends AbstractBehavior<Command> {
 	private void setupHttpListener() {
 		Arguments args = Arguments.get();
 		ActorContext<Command> context = getContext();
-		//	Setting up HTTP listener
+		// Setting up HTTP listener
 		final Materializer materializer = Materializer.createMaterializer(context.getSystem());
 		final Function<HttpRequest, HttpResponse> requestHandler =
 				new Function<>() {
