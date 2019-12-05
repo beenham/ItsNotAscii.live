@@ -117,9 +117,9 @@ public class Coordinator extends AbstractBehavior<Command> {
 	private Coordinator onVideoResponse(VideoProcessorManager.Response r) {
 		pendingRequests.remove(r.getId());
 		responses.put(r.getId(), r.getVideo());
-		if (r.getVideo() != null) {
-			cacheManager.tell(new Cache.StoreVideo(r.getVideo()));
-		}
+//		if (r.getVideo() != null) {
+//			cacheManager.tell(new Cache.StoreVideo(r.getVideo()));
+//		}
 		Log.v(TAG, String.format("Received response #%s (%s) from VideoProcessorManager",
 				r.getId(), r.getVideo() != null ? r.getVideo().getName() : null));
 		return this;
@@ -204,11 +204,7 @@ public class Coordinator extends AbstractBehavior<Command> {
 
 					private HttpResponse getHttpResponse(VideoRequest req) {
 						context.getSelf().tell(req);
-
-						long requestTime = System.currentTimeMillis();
-						long currentTime = System.currentTimeMillis();
-						while (!responses.containsKey(req.id) && 15000 > currentTime - requestTime) {
-							currentTime = System.currentTimeMillis();
+						while (!responses.containsKey(req.id)) {
 							try {
 								Thread.sleep(500);
 							} catch (InterruptedException ignore) {
@@ -218,13 +214,13 @@ public class Coordinator extends AbstractBehavior<Command> {
 						UnicodeVideo video = responses.getOrDefault(req.id, null);
 
 						if (video != null) {
-							int FPS = 24;
+							double FPS = video.getFrameRate();
 							int frameLength = video.getFrames().size();
-							long duration = frameLength < 24 ? 1 : frameLength / FPS;
+							long duration = frameLength < FPS ? 1 : Math.round(frameLength / FPS);
 
 							Source<ByteString, NotUsed> source = Source.range(0, frameLength - 1)
 									.map(str -> ByteString.fromString(video.getFrames().get(str) + "\n"))
-									.throttle(frameLength, Duration.ofSeconds(duration * 4));
+									.throttle(frameLength, Duration.ofSeconds(duration));
 
 							return HttpResponse.create()
 									.withEntity(HttpEntities.createChunked(ContentTypes.TEXT_PLAIN_UTF8, source));

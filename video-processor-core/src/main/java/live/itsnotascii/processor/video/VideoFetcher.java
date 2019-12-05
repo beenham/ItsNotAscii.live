@@ -33,7 +33,7 @@ public abstract class VideoFetcher {
 		this.replyTo = replyTo;
 	}
 
-	public int decodeAndSend(String videoCode) {
+	public VideoProcessor.VideoInfo decodeAndSend(String videoCode) {
 		String url = String.format("https://www.youtube.com/get_video_info?video_id=%s", videoCode);
 
 		String decodedUrl = urlExtensions.stream()
@@ -48,7 +48,7 @@ public abstract class VideoFetcher {
 		try {
 			String contents = read(request(url));
 
-			if (contents.contains("status=fail")) {
+			if (contents.contains(STATUS_FAIL)) {
 				Log.e(TAG, String.format("Status failed. Not a valid video @ %s", contents.indexOf("status=fail")));
 				return null;
 			} else {
@@ -109,7 +109,7 @@ public abstract class VideoFetcher {
 		return writer.toString();
 	}
 
-	protected abstract int sendFramesToProcess(String url, String videoCode);
+	protected abstract VideoProcessor.VideoInfo sendFramesToProcess(String url, String videoCode);
 
 	private String decodeURL(String url) {
 		return URLDecoder.decode(url, Charset.defaultCharset());

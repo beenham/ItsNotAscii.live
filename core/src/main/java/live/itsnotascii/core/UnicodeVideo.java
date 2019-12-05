@@ -11,9 +11,12 @@ public class UnicodeVideo implements Serializable {
 	private final String name;
 	@Getter
 	private final List<String> frames;
+	@Getter
+	private final double frameRate;
 
-	public UnicodeVideo(final String name, final List<byte[]> frames) {
+	public UnicodeVideo(final String name, final List<byte[]> frames, double frameRate) {
 		this.name = name;
 		this.frames = frames.stream().map(String::new).collect(Collectors.toList());
+		this.frameRate = frameRate;
 	}
 }

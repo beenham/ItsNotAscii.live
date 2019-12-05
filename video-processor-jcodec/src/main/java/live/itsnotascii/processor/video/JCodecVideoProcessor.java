@@ -25,7 +25,7 @@ public class JCodecVideoProcessor extends VideoProcessor {
 
 	@Override
 	protected VideoProcessor onRequest(GetVideo r) {
-		Log.v(TAG, String.format("Request #%s for video %s (%s)", r.request.getId(), r.request.getUrl(), r.request.getCode()));
+		Log.i(TAG, String.format("Request #%s for video %s (%s)", r.request.getId(), r.request.getUrl(), r.request.getCode()));
 		List<ActorRef<FrameProcessor.Command>> workers = new ArrayList<>();
 
 		for (int i = 0; i < workerCount; i++)
@@ -37,9 +37,9 @@ public class JCodecVideoProcessor extends VideoProcessor {
 		receivedFrames.put(code, new ArrayList<>());
 
 		JCodecVideoFetcher fetcher = new JCodecVideoFetcher(workers, getContext().getSelf());
-		int frameAmount = fetcher.decodeAndSend(r.request.getCode());
+		VideoInfo info = fetcher.decodeAndSend(r.request.getCode());
 
-		if (frameAmount == 0) {
+		if (info.frameCount == 0) {
 			r.replyTo.tell(new RespondVideo(r.request, null));
 			requests.remove(code);
 			frameWorkers.get(code).forEach(getContext()::stop);
@@ -47,9 +47,9 @@ public class JCodecVideoProcessor extends VideoProcessor {
 			receivedFrames.remove(code);
 			return this;
 		}
-		frameAmounts.put(code, frameAmount);
-		Log.i(TAG, String.format("%s frames for video %s", frameAmount, code));
-
+		Log.i(TAG, String.format("%s frames @ %sfps for video %s", info.frameCount, info.frameRate, code));
+		frameAmounts.put(code, info);
+		checkIfAllFramesReceived(code);
 		return this;
 	}
 }

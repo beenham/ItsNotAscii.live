@@ -30,7 +30,7 @@ public class JCodecVideoFetcher extends VideoFetcher {
 	}
 
 	@Override
-	protected int sendFramesToProcess(String urlString, String videoCode) {
+	protected VideoProcessor.VideoInfo sendFramesToProcess(String urlString, String videoCode) {
 		try {
 			long time = System.currentTimeMillis();
 			URL url = new URL(urlString);
@@ -51,17 +51,18 @@ public class JCodecVideoFetcher extends VideoFetcher {
 				frames.put(i, AWTUtil.toBufferedImage(grab.getNativeFrame()));
 				if (frames.size() > dtm.getTotalFrames() / dtm.getTotalDuration()) {
 					ActorRef<FrameProcessor.Command> worker = frameProcessors.remove(0);
-					worker.tell(new FrameProcessor.ProcessFrames(frames, videoCode, replyTo));
+					worker.tell(new FrameProcessor.ProcessFrames(new HashMap<>(frames), videoCode, replyTo));
 					frameProcessors.add(worker);
 					frames.clear();
 				}
 			}
+			frameProcessors.get(0).tell(new FrameProcessor.ProcessFrames(new HashMap<>(frames), videoCode, replyTo));
 
 			Log.v(TAG, String.format("Time Used to decode video and send: %sms", (System.currentTimeMillis() - time)));
-			return dtm.getTotalFrames();
+			return new VideoProcessor.VideoInfo(dtm.getTotalFrames(), Math.round(dtm.getTotalFrames() / dtm.getTotalDuration()));
 		} catch (Exception e) {
 			e.printStackTrace();
-			return 0;
+			return new VideoProcessor.VideoInfo(0,0);
 		}
 	}
 }

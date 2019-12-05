@@ -7,6 +7,7 @@ import akka.actor.typed.javadsl.AbstractBehavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
+import live.itsnotascii.core.Constants;
 import live.itsnotascii.processor.video.VideoProcessor;
 import live.itsnotascii.util.Log;
 
@@ -18,6 +19,7 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 
 	private FrameProcessor(ActorContext<Command> context) {
 		super(context);
+		Log.i(TAG, String.format("I'm alive! %s", getContext().getSelf()));
 	}
 
 	public static Behavior<Command> create() {
@@ -33,9 +35,9 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 	}
 
 	private FrameProcessor onProcessFrames(ProcessFrames f) {
-		Log.i(TAG, String.format("%s Frames received for %s", f.frames.size(), f.videoCode));
+		Log.v(TAG, String.format("%s Frames received for %s", f.frames.size(), f.videoCode));
 		f.frames.keySet().forEach(k -> {
-			f.replyTo.tell(new VideoProcessor.UnicodeFrame(f.videoCode, k, k.toString()));
+			f.replyTo.tell(new VideoProcessor.UnicodeFrame(f.videoCode, k, Constants.CLEAR_SCREEN + k.toString()));
 		});
 		// TODO
 
@@ -43,7 +45,7 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 	}
 
 	private Behavior<Command> onPostStop() {
-		Log.i(TAG, String.format("Frame Processor actor %s stopped", getContext().getSelf()));
+		Log.v(TAG, String.format("Frame Processor actor %s stopped", getContext().getSelf()));
 		return Behaviors.stopped();
 	}
 

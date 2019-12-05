@@ -104,6 +104,17 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 			int x;
 
 			List<byte[]> frames = new ArrayList<>();
+			x = in.read();
+			if (x > 0) {
+				len += x - '0';
+				while ((x = in.read()) != '\n') {
+					len *= 10;
+					len += x - '0';
+				}
+			}
+			int fps = len;
+			len = 0;
+
 
 			while ((x = in.read()) > 0) {
 				len += x - '0';
@@ -120,7 +131,7 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 				len = 0;
 			}
 
-			cachedVideos.put(name, new UnicodeVideo(name, frames));
+			cachedVideos.put(name, new UnicodeVideo(name, frames, fps));
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
