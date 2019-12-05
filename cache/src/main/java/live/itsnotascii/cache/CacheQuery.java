@@ -89,12 +89,9 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 	}
 
 	private Behavior<Command> onCacheTerminated(CacheTerminated terminated) {
-		stillWaiting.remove(terminated.cacheId);
 		getContext().getLog().info("Cache terminated");
-
-		if (stillWaiting.isEmpty()) {
-			requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
-		}
+		requester.tell(new CacheManager.RespondVideo(requestId, CacheManager.VideoNotFound.INSTANCE));
+		getContext().stop(getContext().getSelf());
 		return this;
 	}
 
