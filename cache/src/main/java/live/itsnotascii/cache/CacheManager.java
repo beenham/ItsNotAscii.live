@@ -52,9 +52,10 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 
 	private CacheManager onCachesUpdated(CachesUpdated command) {
 		caches.clear();
-		command.newCaches.forEach(c -> caches.put(c.path().name(), c));
+		if (command.newCaches.size() > 0)
+			command.newCaches.forEach(c -> caches.put(c.path().name(), c));
 
-		Log.i(TAG, String.format("List of Caches Registered: %s", command.newCaches));
+		Log.i(TAG, String.format("List of Caches Registered: %s (%s)", command.newCaches, command.newCaches.size()));
 		return this;
 	}
 

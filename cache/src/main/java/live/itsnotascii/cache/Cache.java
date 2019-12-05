@@ -27,8 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static live.itsnotascii.core.Constants.CLEAR_SCREEN;
-
 public class Cache extends AbstractBehavior<Cache.Command> {
 	public static final ServiceKey<Command> SERVICE_KEY = ServiceKey.create(Command.class, "Cache");
 	public static final List<String> INTERNAL_VIDEOS = Arrays.asList("thetragedy");
@@ -92,8 +90,8 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 			}
 
 		if (dir == null)
-			if (Files.exists(Paths.get("/videos/" + name + ".txt")))
-				dir = Paths.get("/videos/" + name + ".txt");
+			if (Files.exists(Paths.get("./videos/" + name + ".txt")))
+				dir = Paths.get("./videos/" + name + ".txt");
 			else
 				return null;
 
@@ -143,42 +141,19 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 		List<String> frames = video.getFrames();
 		StringBuilder sb = new StringBuilder();
 
-		int byteSize = 0;
-
 		for (String frame : frames) {
-			byte[] bytes = frame.getBytes();
-			byteSize += bytes.length + CLEAR_SCREEN.getBytes().length;
-			byteSize += String.valueOf(bytes.length).length();
-			byteSize += 2;
-
-			sb.append(bytes.length + CLEAR_SCREEN.getBytes().length)
+			sb.append(frame.getBytes().length)
 					.append('\n')
-					.append(CLEAR_SCREEN)
-					.append(new String(bytes))
+					.append(frame)
 					.append('\n');
 		}
-
-		byte[] outBytes = new byte[byteSize];
-		int i = 0;
-		for (String frame : frames) {
-			byte[] bytes = frame.getBytes();
-			int size = bytes.length + CLEAR_SCREEN.getBytes().length;
-			for (byte b : String.valueOf(size).getBytes())
-				outBytes[i++] = b;
-			outBytes[i++] = '\n';
-			for (byte b : CLEAR_SCREEN.getBytes())
-				outBytes[i++] = b;
-			for (byte b : bytes)
-				outBytes[i++] = b;
-			outBytes[i++] = '\n';
-		}
-
-		System.out.println(Arrays.toString(outBytes));
 
 		String fileName = String.format("./videos/%s.txt", video.getName());
 		Log.i(TAG, String.format("Writing Unicode Video (%s) to file > %s", video, fileName));
 
 		try {
+			if (Files.notExists(Paths.get("./videos/")))
+				Files.createDirectory(Paths.get("./videos/"));
 			Files.write(Paths.get(fileName), sb.toString().getBytes());
 		} catch (IOException e) {
 			Log.e(TAG, String.format("Failed to file: %s", e.getMessage()));

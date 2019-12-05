@@ -117,9 +117,9 @@ public class Coordinator extends AbstractBehavior<Command> {
 	private Coordinator onVideoResponse(VideoProcessorManager.Response r) {
 		pendingRequests.remove(r.getId());
 		responses.put(r.getId(), r.getVideo());
-//		if (r.getVideo() != null) {
-//			cacheManager.tell(new Cache.StoreVideo(r.getVideo()));
-//		}
+		if (r.getVideo() != null) {
+			cacheManager.tell(new Cache.StoreVideo(r.getVideo()));
+		}
 		Log.v(TAG, String.format("Received response #%s (%s) from VideoProcessorManager",
 				r.getId(), r.getVideo() != null ? r.getVideo().getName() : null));
 		return this;

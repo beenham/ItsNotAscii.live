@@ -19,7 +19,7 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 
 	private FrameProcessor(ActorContext<Command> context) {
 		super(context);
-		Log.i(TAG, String.format("I'm alive! %s", getContext().getSelf()));
+		Log.v(TAG, String.format("I'm alive! %s", getContext().getSelf()));
 	}
 
 	public static Behavior<Command> create() {
