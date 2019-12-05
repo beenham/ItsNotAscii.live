@@ -25,7 +25,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class Cache extends AbstractBehavior<Cache.Command> {
 	public static final ServiceKey<Command> SERVICE_KEY = ServiceKey.create(Command.class, "Cache");
@@ -113,7 +112,6 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 			int fps = len;
 			len = 0;
 
-
 			while ((x = in.read()) > 0) {
 				len += x - '0';
 				while ((x = in.read()) != '\n') {
@@ -125,7 +123,6 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 				frames.add(buffer);
 				// empty start of line
 				in.read();
-// 			Log.v(TAG, String.format("Target length: %s | Actual length: %s", len, new String(buffer).length()));
 				len = 0;
 			}
 
@@ -138,14 +135,33 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 	}
 
 	private void storeVideo(UnicodeVideo video) {
+		cachedVideos.put(video.getName(), video);
 		List<String> frames = video.getFrames();
-		StringBuilder sb = new StringBuilder();
+
+		long fps = Math.round(video.getFrameRate());
+		int totalByteSize = 0;
+		totalByteSize += String.valueOf(fps).length() + 1;
 
 		for (String frame : frames) {
-			sb.append(frame.getBytes().length)
-					.append('\n')
-					.append(frame)
-					.append('\n');
+			byte[] frameBytes = frame.getBytes();
+			totalByteSize += String.valueOf(frameBytes.length).length() + 1 + frameBytes.length + 1;
+		}
+
+		byte[] outBytes = new byte[totalByteSize];
+		int i = 0;
+		for (byte b : String.valueOf(fps).getBytes())
+			outBytes[i++] = b;
+		outBytes[i++] = '\n';
+
+		for (String frame : frames) {
+			byte[] bytes = frame.getBytes();
+			int size = bytes.length;
+			for (byte b : String.valueOf(size).getBytes())
+				outBytes[i++] = b;
+			outBytes[i++] = '\n';
+			for (byte b : bytes)
+				outBytes[i++] = b;
+			outBytes[i++] = '\n';
 		}
 
 		String fileName = String.format("./videos/%s.txt", video.getName());
@@ -154,7 +170,7 @@ public class Cache extends AbstractBehavior<Cache.Command> {
 		try {
 			if (Files.notExists(Paths.get("./videos/")))
 				Files.createDirectory(Paths.get("./videos/"));
-			Files.write(Paths.get(fileName), sb.toString().getBytes());
+			Files.write(Paths.get(fileName), outBytes);
 		} catch (IOException e) {
 			Log.e(TAG, String.format("Failed to file: %s", e.getMessage()));
 		}

@@ -53,9 +53,9 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 	private CacheManager onCachesUpdated(CachesUpdated command) {
 		caches.clear();
 		if (command.newCaches.size() > 0)
-			command.newCaches.forEach(c -> caches.put(c.path().name(), c));
+			command.newCaches.forEach(c -> caches.put(c.path().toString(), c));
 
-		Log.i(TAG, String.format("List of Caches Registered: %s (%s)", command.newCaches, command.newCaches.size()));
+		Log.i(TAG, String.format("List of Caches Registered: %s (%s)", caches, caches.size()));
 		return this;
 	}
 
@@ -80,10 +80,6 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 	}
 
 	public enum VideoNotFound implements Video {
-		INSTANCE
-	}
-
-	public enum CacheTimedOut implements Video {
 		INSTANCE
 	}
 

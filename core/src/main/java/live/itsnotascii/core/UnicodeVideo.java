@@ -19,4 +19,9 @@ public class UnicodeVideo implements Serializable {
 		this.frames = frames.stream().map(String::new).collect(Collectors.toList());
 		this.frameRate = frameRate;
 	}
+
+	@Override
+	public String toString() {
+		return String.format("Unicode Video %s | %s frames @ %sfps", name, frames.size(), frameRate);
+	}
 }

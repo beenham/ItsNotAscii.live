@@ -2,6 +2,7 @@ package live.itsnotascii.cache;
 
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
+import akka.actor.typed.PostStop;
 import akka.actor.typed.javadsl.AbstractBehavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
@@ -12,6 +13,7 @@ import live.itsnotascii.util.Log;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
@@ -20,6 +22,7 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 	private final long requestId;
 	private final ActorRef<CacheManager.Response> requester;
 	private final Set<String> stillWaiting;
+	private CacheManager.Response validResponse;
 
 	private CacheQuery(
 			Map<String, ActorRef<Cache.Command>> cacheIdToActor,
@@ -40,7 +43,7 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 				context.messageAdapter(Cache.RespondVideo.class, WrappedRespondVideo::new);
 
 		for (Map.Entry<String, ActorRef<Cache.Command>> entry : cacheIdToActor.entrySet()) {
-			context.getLog().info("Sending request to {}:{}", entry.getKey(), entry.getValue());
+			Log.v(TAG, String.format("Sending request to %s", entry.getValue()));
 			context.watchWith(entry.getValue(), new CacheTerminated(entry.getKey()));
 			entry.getValue().tell(new Cache.RetrieveVideo(0L, respondTemperatureAdapter, videoCode));
 		}
@@ -66,6 +69,7 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 				.onMessage(WrappedRespondVideo.class, this::onRespondVideo)
 				.onMessage(CacheTerminated.class, this::onCacheTerminated)
 				.onMessage(CollectionTimeout.class, this::onCollectionTimeout)
+				.onSignal(PostStop.class, s -> onPostStop())
 				.build();
 	}
 
@@ -76,37 +80,37 @@ public class CacheQuery extends AbstractBehavior<CacheQuery.Command> {
 		Log.v(TAG, String.format("%s: Video response for #%s from cache %s", getContext().getSelf(),
 				r.response.requestId, r.response.cacheId));
 		if (wrappedVideo.video != null && wrappedVideo.video.getFrames() != null) {
-			requester.tell(new CacheManager.Response(requestId, wrappedVideo));
+			this.validResponse = new CacheManager.Response(requestId, wrappedVideo);
 			Log.v(TAG, String.format("%s: Cache %s Found Video for #%s", getContext().getSelf(),
 					r.response.cacheId, r.response.requestId));
-
-			return Behaviors.stopped();
-		} else if (stillWaiting.isEmpty()) {
-			requester.tell(new CacheManager.Response(requestId, CacheManager.VideoNotFound.INSTANCE));
-			Log.v(TAG, String.format("%s: Still waiting is empty for #%s", getContext().getSelf(),
-					r.response.requestId));
-
-			return Behaviors.stopped();
+			stillWaiting.clear();
 		}
 
-		return this;
+		return stopWhenFinished();
 	}
 
 	private Behavior<Command> onCacheTerminated(CacheTerminated terminated) {
 		stillWaiting.remove(terminated.cacheId);
-		Log.v(TAG, String.format("%s: Cache (%s) Terminated", getContext().getSelf(), terminated.cacheId));
-
-		if (stillWaiting.isEmpty()) {
-			requester.tell(new CacheManager.Response(requestId, CacheManager.VideoNotFound.INSTANCE));
-			getContext().stop(getContext().getSelf());
-		}
-		return this;
+		return stopWhenFinished();
 	}
 
 	private Behavior<Command> onCollectionTimeout(CollectionTimeout timeout) {
 		Log.v(TAG, String.format("%s: Timeout Reached.", getContext().getSelf()));
-		requester.tell(new CacheManager.Response(requestId, CacheManager.CacheTimedOut.INSTANCE));
-		getContext().stop(getContext().getSelf());
+		stillWaiting.clear();
+		return stopWhenFinished();
+	}
+
+	private Behavior<Command> stopWhenFinished() {
+		if (stillWaiting.isEmpty()) {
+			requester.tell(Objects.requireNonNullElseGet(validResponse,
+					() -> new CacheManager.Response(requestId, CacheManager.VideoNotFound.INSTANCE)));
+			return Behaviors.stopped();
+		}
+		return this;
+	}
+
+	private Behavior<Command> onPostStop() {
+		Log.v(TAG, String.format("Killing query %s", this.getContext().getSelf()));
 		return this;
 	}
 
