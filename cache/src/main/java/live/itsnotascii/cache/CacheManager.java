@@ -60,7 +60,8 @@ public class CacheManager extends AbstractBehavior<CacheManager.Command> {
 
 	private CacheManager onRequestVideo(Request request) {
 		if (caches.size() == 0) {
-			request.replyTo.tell(new Response(request.id, null));
+			request.replyTo.tell(new Response(request.id, VideoNotFound.INSTANCE));
+			return this;
 		}
 
 		Map<String, ActorRef<Cache.Command>> cacheIdToActorCopy = new HashMap<>(this.caches);
