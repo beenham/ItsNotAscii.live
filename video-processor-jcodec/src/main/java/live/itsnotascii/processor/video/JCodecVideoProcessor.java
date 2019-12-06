@@ -34,7 +34,6 @@ public class JCodecVideoProcessor extends VideoProcessor {
 		String code = r.request.getCode();
 		requests.put(code, r);
 		frameWorkers.put(code, workers);
-		receivedFrames.put(code, new ArrayList<>());
 
 		JCodecVideoFetcher fetcher = new JCodecVideoFetcher(workers, getContext().getSelf());
 		VideoInfo info = fetcher.decodeAndSend(r.request.getCode());
@@ -44,12 +43,10 @@ public class JCodecVideoProcessor extends VideoProcessor {
 			requests.remove(code);
 			frameWorkers.get(code).forEach(getContext()::stop);
 			frameWorkers.remove(code);
-			receivedFrames.remove(code);
 			return this;
 		}
 		Log.i(TAG, String.format("%s frames @ %sfps for video %s", info.frameCount, info.frameRate, code));
-		frameAmounts.put(code, info);
-		checkIfAllFramesReceived(code);
+		requests.get(code).replyTo.tell(info);
 		return this;
 	}
 }

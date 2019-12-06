@@ -15,22 +15,17 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public abstract class VideoProcessor extends AbstractBehavior<VideoProcessor.Command> {
 	private static final String TAG = VideoProcessor.class.getCanonicalName();
 	public static ServiceKey<Command> SERVICE_KEY = ServiceKey.create(Command.class, "VideoProcessor");
 
 	protected final Map<String, List<ActorRef<FrameProcessor.Command>>> frameWorkers;
-	protected final Map<String, List<UnicodeFrame>> receivedFrames;
-	protected final Map<String, VideoInfo> frameAmounts;
 	protected final Map<String, GetVideo> requests;
 
 	protected VideoProcessor(ActorContext<Command> context) {
 		super(context);
 		this.frameWorkers = new HashMap<>();
-		this.receivedFrames = new HashMap<>();
-		this.frameAmounts = new HashMap<>();
 		this.requests = new HashMap<>();
 
 		Log.i(TAG, String.format("I'm alive! %s", context.getSelf()));
@@ -42,6 +37,7 @@ public abstract class VideoProcessor extends AbstractBehavior<VideoProcessor.Com
 		return newReceiveBuilder()
 				.onMessage(GetVideo.class, this::onRequest)
 				.onMessage(UnicodeFrame.class, this::onFrameReceived)
+				.onMessage(Completed.class, this::onCompletion)
 				.build();
 	}
 
@@ -49,32 +45,15 @@ public abstract class VideoProcessor extends AbstractBehavior<VideoProcessor.Com
 
 	private VideoProcessor onFrameReceived(UnicodeFrame frame) {
 		String videoCode = frame.videoCode;
-		receivedFrames.get(videoCode).add(frame);
-		checkIfAllFramesReceived(videoCode);
+		requests.get(videoCode).replyTo.tell(frame);
 		return this;
 	}
 
-	protected void checkIfAllFramesReceived(String videoCode) {
-		VideoInfo info = frameAmounts.getOrDefault(videoCode, null);
-		List<UnicodeFrame> currentFrames = receivedFrames.get(videoCode);
-		if (info != null && currentFrames.size() == info.frameCount) {
-			GetVideo request = requests.get(videoCode);
-			List<byte[]> frames = currentFrames.stream()
-					.filter(f -> f.videoCode.equals(request.request.getCode()))
-					.sorted()
-					.map(UnicodeFrame::getFrame)
-					.map(String::getBytes)
-					.collect(Collectors.toList());
-
-			request.replyTo.tell(new RespondVideo(request.request,
-					new UnicodeVideo(request.request.getCode(), frames, info.frameRate)));
-
-			frameWorkers.get(videoCode).forEach(getContext()::stop);
-			frameWorkers.remove(videoCode);
-			requests.remove(videoCode);
-			receivedFrames.remove(videoCode);
-			frameAmounts.remove(videoCode);
-		}
+	private VideoProcessor onCompletion(Completed completed) {
+		frameWorkers.get(completed.videoCode).forEach(getContext()::stop);
+		frameWorkers.remove(completed.videoCode);
+		requests.remove(completed.videoCode);
+		return this;
 	}
 
 	public interface Command extends live.itsnotascii.core.messages.Command {
@@ -82,15 +61,15 @@ public abstract class VideoProcessor extends AbstractBehavior<VideoProcessor.Com
 
 	static final class GetVideo implements Command, Serializable {
 		protected final VideoProcessorManager.Request request;
-		protected final ActorRef<RespondVideo> replyTo;
+		protected final ActorRef<VideoQuery.Command> replyTo;
 
-		public GetVideo(VideoProcessorManager.Request request, ActorRef<RespondVideo> replyTo) {
+		public GetVideo(VideoProcessorManager.Request request, ActorRef<VideoQuery.Command> replyTo) {
 			this.request = request;
 			this.replyTo = replyTo;
 		}
 	}
 
-	public static final class RespondVideo implements Serializable {
+	public static final class RespondVideo implements VideoQuery.Command, Serializable {
 		@Getter
 		private final VideoProcessorManager.Request request;
 		@Getter
@@ -102,7 +81,15 @@ public abstract class VideoProcessor extends AbstractBehavior<VideoProcessor.Com
 		}
 	}
 
-	public static final class VideoInfo {
+	public static final class Completed implements Command, Serializable {
+		private final String videoCode;
+
+		public Completed(String videoCode) {
+			this.videoCode = videoCode;
+		}
+	}
+
+	public static final class VideoInfo implements VideoQuery.Command, Serializable {
 		protected final int frameCount;
 		protected final double frameRate;
 
@@ -112,7 +99,9 @@ public abstract class VideoProcessor extends AbstractBehavior<VideoProcessor.Com
 		}
 	}
 
-	public static final class UnicodeFrame implements Command, Comparable<UnicodeFrame> {
+	public static final class UnicodeFrame implements VideoQuery.Command, Command, Comparable<UnicodeFrame>,
+			Serializable {
+		@Getter
 		private final int frameNum;
 		@Getter
 		private final String videoCode, frame;
@@ -130,7 +119,7 @@ public abstract class VideoProcessor extends AbstractBehavior<VideoProcessor.Com
 
 		@Override
 		public int compareTo(UnicodeFrame f) {
-			return Integer.compare(f.frameNum, this.frameNum);
+			return Integer.compare(this.frameNum, f.frameNum);
 		}
 	}
 }

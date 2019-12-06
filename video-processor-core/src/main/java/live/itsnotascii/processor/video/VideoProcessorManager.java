@@ -25,6 +25,7 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 	private static final String TAG = VideoProcessorManager.class.getCanonicalName();
 
 	private final Map<Long, Request> requests;
+	private final Map<Long, ActorRef<VideoQuery.Command>> queries;
 	private final Map<Long, ActorRef<VideoProcessor.Command>> workingRequests;
 	private final Map<String, ActorRef<VideoProcessor.Command>> videoProcessors;
 	private final Set<ActorRef<VideoProcessor.Command>> workingVideoProcessors;
@@ -33,6 +34,7 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 	private VideoProcessorManager(ActorContext<Command> context) {
 		super(context);
 		this.videoProcessors = new HashMap<>();
+		this.queries = new HashMap<>();
 		this.requests = new HashMap<>();
 		this.workingRequests = new HashMap<>();
 		this.workingVideoProcessors = new HashSet<>();
@@ -70,6 +72,7 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 					.filter(r -> unavailableWorking.contains(workingRequests.get(r)))
 					.collect(Collectors.toList());
 			newPending.parallelStream().forEach(workingRequests::remove);
+			newPending.parallelStream().map(queries::remove).forEach(getContext()::stop);
 
 			List<ActorRef<VideoProcessor.Command>> available = command.newVideoProcessors.parallelStream()
 					.filter(Predicate.not(workingVideoProcessors::contains))
@@ -114,6 +117,7 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 
 	private VideoProcessorManager onVideoResponse(WrappedRespondVideo r) {
 		ActorRef<VideoProcessor.Command> worker = workingRequests.remove(r.response.getRequest().id);
+		queries.remove(r.response.getRequest().id);
 		requests.remove(r.response.getRequest().id);
 		pendingRequests.remove(r.response.getRequest().id);
 		workingVideoProcessors.remove(worker);
@@ -138,7 +142,7 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 	private void sendRequest(Request r, ActorRef<VideoProcessor.Command> worker) {
 		ActorRef<VideoProcessor.RespondVideo> respondVideoAdapter =
 				getContext().messageAdapter(VideoProcessor.RespondVideo.class, WrappedRespondVideo::new);
-		worker.tell(new VideoProcessor.GetVideo(r, respondVideoAdapter));
+		queries.put(r.id, getContext().spawnAnonymous(VideoQuery.create(r, respondVideoAdapter, worker)));
 		workingRequests.put(r.id, worker);
 		workingVideoProcessors.add(worker);
 

@@ -36,7 +36,7 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 	}
 
 	private FrameProcessor onProcessFrames(ProcessFrames f) {
-		Log.v(TAG, String.format("%s Frames received for %s", f.frames.size(), f.videoCode));
+//		Log.v(TAG, String.format("%s Frames received for %s", f.frames.size(), f.videoCode));
 
 		Colors.ColorProfile profile = Colors.ColorProfile.COLOR_PROFILE_24BIT;
 
@@ -46,13 +46,16 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 
 			StringBuilder builder = new StringBuilder();
 
+			if (frame.getKey() == 0)
+				builder.append(Constants.CLEAR_SCREEN);
+
 			int width = image.getWidth();
 			int height = image.getHeight();
 
 			byte[] pixels = ((DataBufferByte) image.getRaster().getDataBuffer()).getData();
 
-			for (int y = 0; y < height; y += 16) {
-				for (int x = 0; x < width; x += 8) {
+			for (int y = 0; y < height; y += 12) {
+				for (int x = 0; x < width; x += 6) {
 					Colors.Color fg = null, bg = null;
 					{
 						int i = (y * width + x) * 3;

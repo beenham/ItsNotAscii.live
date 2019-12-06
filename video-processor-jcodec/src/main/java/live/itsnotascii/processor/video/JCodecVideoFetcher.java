@@ -47,22 +47,24 @@ public class JCodecVideoFetcher extends VideoFetcher {
 			FrameGrab grab = FrameGrab.createFrameGrab(NIOUtils.readableChannel(tmpFile));
 			Map<Integer, BufferedImage> frames = new HashMap<>();
 
-			for (int i = 0; i < dtm.getTotalFrames(); i++) {
+			for (int i = 0; i < dtm.getTotalFrames(); i+=2) {
 				frames.put(i, AWTUtil.toBufferedImage(grab.getNativeFrame()));
-				if (frames.size() > dtm.getTotalFrames() / dtm.getTotalDuration()) {
+				grab.getNativeFrame();
+				if (frames.size() == 5) {
 					ActorRef<FrameProcessor.Command> worker = frameProcessors.remove(0);
 					worker.tell(new FrameProcessor.ProcessFrames(new HashMap<>(frames), videoCode, replyTo));
 					frameProcessors.add(worker);
 					frames.clear();
 				}
 			}
-			frameProcessors.get(0).tell(new FrameProcessor.ProcessFrames(new HashMap<>(frames), videoCode, replyTo));
+			if (frames.size() > 0)
+				frameProcessors.get(0).tell(new FrameProcessor.ProcessFrames(new HashMap<>(frames), videoCode, replyTo));
 
 			Log.v(TAG, String.format("Time Used to decode video and send: %sms", (System.currentTimeMillis() - time)));
-			return new VideoProcessor.VideoInfo(dtm.getTotalFrames(), Math.round(dtm.getTotalFrames() / dtm.getTotalDuration()));
+			return new VideoProcessor.VideoInfo(dtm.getTotalFrames() / 2, Math.round(dtm.getTotalFrames() / (dtm.getTotalDuration() * 2)));
 		} catch (Exception e) {
 			e.printStackTrace();
-			return new VideoProcessor.VideoInfo(0,0);
+			return new VideoProcessor.VideoInfo(0, 0);
 		}
 	}
 }
