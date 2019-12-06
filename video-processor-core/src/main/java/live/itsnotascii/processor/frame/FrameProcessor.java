@@ -55,25 +55,25 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 
 			Log.wtf(TAG, "Frame " + index);
 
-			for (int y = 0; y < height / 8; y++) {
-				for (int x = 0; x < width / 8; x++) {
+			for (int y = 0; y < height; y += 8) {
+				for (int x = 0; x < width; x += 4) {
 					int i = (y * width + x) * 3;
 					byte r = pixels[i];
 					byte g = pixels[i + 1];
 					byte b = pixels[i + 2];
 
-					Colors.Color color = Colors.getColor(r, g, b, Colors.ColorProfile.COLOR_PROFILE_4BIT);
-					color = Colors.mapToColorProfile(color, Colors.ColorProfile.COLOR_PROFILE_4BIT);
+					Colors.Color color = Colors.getColor(r, g, b, Colors.ColorProfile.COLOR_PROFILE_8BIT);
+					color = Colors.mapToColorProfile(color, Colors.ColorProfile.COLOR_PROFILE_8BIT);
 
 					builder.append("\033[");
-					builder.append(Colors.ansiCode(color, Colors.ColorProfile.COLOR_PROFILE_4BIT, true));
+					builder.append(Colors.ansiCode(color, Colors.ColorProfile.COLOR_PROFILE_8BIT, true));
 					builder.append("m█");
 				}
 
 				builder.append("\033[0m\n");
 
-				f.replyTo.tell(new VideoProcessor.UnicodeFrame(f.videoCode, index, Constants.CLEAR_SCREEN + builder.toString()));
 			}
+			f.replyTo.tell(new VideoProcessor.UnicodeFrame(f.videoCode, index, Constants.CLEAR_SCREEN + builder.toString()));
 		}
 
 		return this;

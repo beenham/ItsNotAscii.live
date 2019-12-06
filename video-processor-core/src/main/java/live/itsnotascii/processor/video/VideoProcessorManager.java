@@ -90,7 +90,7 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 			processPending(pendingRequests, available);
 		}
 
-		Log.i(TAG, String.format("List of Video Processors Registered: %s", command.newVideoProcessors));
+		Log.i(TAG, String.format("List of Video Processors Registered: %s (%s)", videoProcessors, videoProcessors.size()));
 		return this;
 	}
 
