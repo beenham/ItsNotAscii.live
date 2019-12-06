@@ -11,6 +11,7 @@ import live.itsnotascii.core.Constants;
 import live.itsnotascii.processor.video.VideoProcessor;
 import live.itsnotascii.util.Log;
 
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferByte;
 import java.util.Map;
@@ -35,6 +36,17 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 				.build();
 	}
 
+	public static BufferedImage resize(BufferedImage img, int newW, int newH) {
+		Image tmp = img.getScaledInstance(newW, newH, Image.SCALE_SMOOTH);
+		BufferedImage dimg = new BufferedImage(newW, newH, BufferedImage.TYPE_3BYTE_BGR);
+
+		Graphics2D g2d = dimg.createGraphics();
+		g2d.drawImage(tmp, 0, 0, null);
+		g2d.dispose();
+
+		return dimg;
+	}
+
 	private FrameProcessor onProcessFrames(ProcessFrames f) {
 //		Log.v(TAG, String.format("%s Frames received for %s", f.frames.size(), f.videoCode));
 
@@ -43,6 +55,8 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 		for (Map.Entry<Integer, BufferedImage> frame : f.frames.entrySet()) {
 			int index = frame.getKey();
 			BufferedImage image = frame.getValue();
+
+			image = resize(image, 80, 45);
 
 			StringBuilder builder = new StringBuilder();
 
@@ -54,9 +68,12 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 
 			byte[] pixels = ((DataBufferByte) image.getRaster().getDataBuffer()).getData();
 
-			for (int y = 0; y < height; y += 12) {
-				for (int x = 0; x < width; x += 6) {
-					Colors.Color fg = null, bg = null;
+			Log.wtf(TAG, "Frame " + index);
+
+			for (int y = 0; y < height; y += 2) {
+				Colors.Color previousFg = null, previousBg = null;
+				for (int x = 0; x < width; x++) {
+					Colors.Color fg, bg = null;
 					{
 						int i = (y * width + x) * 3;
 						byte b = pixels[i];
@@ -67,8 +84,8 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 						fg = Colors.mapToColorProfile(color, profile);
 					}
 					{
-						if (y + 8 < height) {
-							int i = ((y + 8) * width + x) * 3;
+						if (y + 1 < height) {
+							int i = ((y + 1) * width + x) * 3;
 							byte b = pixels[i];
 							byte g = pixels[i + 1];
 							byte r = pixels[i + 2];
@@ -79,13 +96,19 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 					}
 
 
-					builder.append("\033[");
-					builder.append(Colors.ansiCode(fg, profile, true));
-					if (bg != null) {
-						builder.append(";");
-						builder.append(Colors.ansiCode(bg, profile, false));
+					if (fg != previousFg || bg != previousBg) {
+						builder.append("\033[");
+						builder.append(Colors.ansiCode(fg, profile, true));
+						if (bg != null && bg != previousBg) {
+							builder.append(";");
+							builder.append(Colors.ansiCode(bg, profile, false));
+						}
+						builder.append("m");
 					}
-					builder.append("m▀");
+					builder.append("▀");
+
+					previousFg = fg;
+					previousBg = bg;
 				}
 
 				builder.append("\033[0m\n");
