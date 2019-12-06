@@ -19,7 +19,11 @@ public class Colors {
 
 		ColorProfile(int bits) {
 			this.colors = (int) Math.pow(2, bits);
-			this.mask = (0xff << (int) (7 - (Math.ceil(bits / 3f)))) & 0xff;
+			if (bits < 24) {
+				this.mask = (0xff << (int) (7 - (Math.ceil(bits / 3f)))) & 0xff;
+			} else {
+				this.mask = 0xff;
+			}
 		}
 	}
 
@@ -69,7 +73,7 @@ public class Colors {
 		green &= profile.mask;
 		blue &= profile.mask;
 
-		int color = red << 16 | green << 8 | blue;
+		int color = (red & 0xff) << 16 | (green & 0xff) << 8 | (blue & 0xff);
 
 		return sColors.computeIfAbsent(color, Color::new);
 	}
@@ -102,11 +106,11 @@ public class Colors {
 		switch (mode) {
 			case COLOR_PROFILE_3BIT:
 			case COLOR_PROFILE_4BIT:
-				return "" + (30 + (foreground ? 0 : 10) + color.index);
+				return "" + (30 + (foreground ? 0 : 10) + color.index + (color.index >= 8 ? 52 : 0));
 			case COLOR_PROFILE_8BIT:
 				return (foreground ? 38 : 48) + ";5;" + color.index;
 			case COLOR_PROFILE_24BIT:
-				return (foreground ? 38 : 48) + ";2;" + color.red + ";" + color.green + ";" + color.blue;
+				return (foreground ? 38 : 48) + ";2;" + (color.red & 0xff) + ";" + (color.green & 0xff) + ";" + (color.blue & 0xff);
 		}
 		return "";
 	}

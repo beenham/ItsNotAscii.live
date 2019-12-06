@@ -38,9 +38,7 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 	private FrameProcessor onProcessFrames(ProcessFrames f) {
 		Log.v(TAG, String.format("%s Frames received for %s", f.frames.size(), f.videoCode));
 
-		/*f.frames.keySet().forEach(k -> {
-			f.replyTo.tell(new VideoProcessor.UnicodeFrame(f.videoCode, k, Constants.CLEAR_SCREEN + k.toString()));
-		});*/
+		Colors.ColorProfile profile = Colors.ColorProfile.COLOR_PROFILE_24BIT;
 
 		for (Map.Entry<Integer, BufferedImage> frame : f.frames.entrySet()) {
 			int index = frame.getKey();
@@ -53,27 +51,44 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 
 			byte[] pixels = ((DataBufferByte) image.getRaster().getDataBuffer()).getData();
 
-			Log.wtf(TAG, "Frame " + index);
+			for (int y = 0; y < height; y += 16) {
+				for (int x = 0; x < width; x += 8) {
+					Colors.Color fg = null, bg = null;
+					{
+						int i = (y * width + x) * 3;
+						byte b = pixels[i];
+						byte g = pixels[i + 1];
+						byte r = pixels[i + 2];
 
-			for (int y = 0; y < height; y += 8) {
-				for (int x = 0; x < width; x += 4) {
-					int i = (y * width + x) * 3;
-					byte r = pixels[i];
-					byte g = pixels[i + 1];
-					byte b = pixels[i + 2];
+						Colors.Color color = Colors.getColor(r, g, b, profile);
+						fg = Colors.mapToColorProfile(color, profile);
+					}
+					{
+						if (y + 8 < height) {
+							int i = ((y + 8) * width + x) * 3;
+							byte b = pixels[i];
+							byte g = pixels[i + 1];
+							byte r = pixels[i + 2];
 
-					Colors.Color color = Colors.getColor(r, g, b, Colors.ColorProfile.COLOR_PROFILE_8BIT);
-					color = Colors.mapToColorProfile(color, Colors.ColorProfile.COLOR_PROFILE_8BIT);
+							Colors.Color color = Colors.getColor(r, g, b, profile);
+							bg = Colors.mapToColorProfile(color, profile);
+						}
+					}
+
 
 					builder.append("\033[");
-					builder.append(Colors.ansiCode(color, Colors.ColorProfile.COLOR_PROFILE_8BIT, true));
-					builder.append("m█");
+					builder.append(Colors.ansiCode(fg, profile, true));
+					if (bg != null) {
+						builder.append(";");
+						builder.append(Colors.ansiCode(bg, profile, false));
+					}
+					builder.append("m▀");
 				}
 
 				builder.append("\033[0m\n");
 
 			}
-			f.replyTo.tell(new VideoProcessor.UnicodeFrame(f.videoCode, index, Constants.CLEAR_SCREEN + builder.toString()));
+			f.replyTo.tell(new VideoProcessor.UnicodeFrame(f.videoCode, index, "\033[0;0H" + builder.toString()));
 		}
 
 		return this;

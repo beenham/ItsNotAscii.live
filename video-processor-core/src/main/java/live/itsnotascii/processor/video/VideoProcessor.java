@@ -130,11 +130,7 @@ public abstract class VideoProcessor extends AbstractBehavior<VideoProcessor.Com
 
 		@Override
 		public int compareTo(UnicodeFrame f) {
-			if (f.frameNum < this.frameNum)
-				return 1;
-			else if (f.frameNum > this.frameNum)
-				return -1;
-			return 0;
+			return Integer.compare(f.frameNum, this.frameNum);
 		}
 	}
 }
