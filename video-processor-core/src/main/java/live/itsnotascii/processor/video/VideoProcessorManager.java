@@ -96,6 +96,7 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 
 	private VideoProcessorManager onVideoRequest(Request r) {
 		Log.v(TAG, String.format("Request #%s received for %s (%s)", r.id, r.url, r.code));
+		requests.put(r.id, r);
 		List<ActorRef<VideoProcessor.Command>> available = videoProcessors.values().parallelStream()
 				.filter(Predicate.not(workingVideoProcessors::contains))
 				.collect(Collectors.toList());
@@ -105,6 +106,7 @@ public class VideoProcessorManager extends AbstractBehavior<VideoProcessorManage
 			sendRequest(r, worker);
 		} else {
 			pendingRequests.add(r.id);
+			Log.v(TAG, String.format("Added request #%s to pending.", r.id));
 		}
 
 		return this;
