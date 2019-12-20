@@ -72,25 +72,11 @@ public class Coordinator extends AbstractBehavior<Command> {
 	@Override
 	public Receive<Command> createReceive() {
 		return newReceiveBuilder()
-				.onMessage(RegisterRequest.class, this::onRegisterRequest)
 				.onMessage(VideoRequest.class, this::onVideoRequest)
 				.onMessage(CacheManager.Response.class, this::onCacheResponse)
 				.onMessage(VideoProcessorManager.Response.class, this::onVideoResponse)
 				.onSignal(PostStop.class, s -> onPostStop())
 				.build();
-	}
-
-	private Coordinator onRegisterRequest(RegisterRequest req) {
-		Log.v(TAG, String.format("Register request from %s", req.sender));
-
-		Http http = Http.get(getContext().getSystem().classicSystem());
-		HttpRequest request = HttpRequest.create()
-				.withUri(req.sender)
-				.addHeader(HttpHeader.parse(Constants.REGISTER_ACCEPT, req.location));
-		http.singleRequest(request);
-
-		Log.v(TAG, String.format("Sent register accept (%s) to %s", req.location, req.sender));
-		return this;
 	}
 
 	private Coordinator onVideoRequest(VideoRequest r) {
@@ -155,9 +141,9 @@ public class Coordinator extends AbstractBehavior<Command> {
 
 						if (req.getHeaders() != null) {
 							if (req.getHeader(Constants.REGISTER_REQUEST).isPresent()) {
-								String sendTo = req.getHeader(Constants.REGISTER_REQUEST).get().value();
 								String location = String.format("%s:%d", args.getHostname(), args.getPort());
-								context.getSelf().tell(new Coordinator.RegisterRequest(sendTo, location));
+								return HttpResponse.create()
+										.addHeader(HttpHeader.parse(Constants.REGISTER_ACCEPT, location));
 							}
 
 							if (req.getHeader("user-agent").isPresent()
@@ -236,16 +222,6 @@ public class Coordinator extends AbstractBehavior<Command> {
 			Log.v(TAG, String.format("Accepted new connection from %s", c.remoteAddress()));
 			c.handleWithSyncHandler(requestHandler, materializer);
 		})).run(materializer);
-	}
-
-	public static class RegisterRequest implements Command {
-		private final String sender;
-		private final String location;
-
-		public RegisterRequest(String sender, String location) {
-			this.sender = sender;
-			this.location = location;
-		}
 	}
 
 	private static class VideoRequest implements Command {
