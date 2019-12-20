@@ -52,6 +52,7 @@ public class JCodecVideoFetcher extends VideoFetcher {
 				grab.getNativeFrame();
 				if (frames.size() == 5) {
 					ActorRef<FrameProcessor.Command> worker = frameProcessors.remove(0);
+					Log.v(TAG, String.format("Sending %s frames (%s) to %s", frames.size(), frames.keySet(), worker));
 					worker.tell(new FrameProcessor.ProcessFrames(new HashMap<>(frames), videoCode, replyTo));
 					frameProcessors.add(worker);
 					frames.clear();

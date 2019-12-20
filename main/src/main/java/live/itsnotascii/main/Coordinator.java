@@ -205,7 +205,7 @@ public class Coordinator extends AbstractBehavior<Command> {
 							long duration = frameLength < FPS ? 1 : Math.round(frameLength / FPS);
 
 							Source<ByteString, NotUsed> source = Source.range(0, frameLength - 1)
-									.map(str -> ByteString.fromString(video.getFrames().get(str) + "\n"))
+									.map(str -> ByteString.fromString(video.getFrames().get(str)))
 									.throttle(frameLength, Duration.ofSeconds(duration));
 
 							return HttpResponse.create()

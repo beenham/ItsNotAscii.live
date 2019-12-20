@@ -39,8 +39,10 @@ public abstract class VideoFetcher {
 		String decodedUrl = urlExtensions.stream()
 				.map(s -> getVideoURL(url + s))
 				.filter(Objects::nonNull)
-				.findFirst().orElseThrow();
+				.findFirst().orElse("Not Found");
 
+		if (decodedUrl.equals( "NotFound"))
+			return new VideoProcessor.VideoInfo(0,0);
 		return sendFramesToProcess(decodedUrl, videoCode);
 	}
 

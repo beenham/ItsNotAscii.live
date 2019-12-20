@@ -39,7 +39,7 @@ public class JCodecVideoProcessor extends VideoProcessor {
 		VideoInfo info = fetcher.decodeAndSend(r.request.getCode());
 
 		if (info.frameCount == 0) {
-			r.replyTo.tell(new RespondVideo(r.request, null));
+			r.replyTo.tell(new VideoProcessor.VideoInfo(0,0));
 			requests.remove(code);
 			frameWorkers.get(code).forEach(getContext()::stop);
 			frameWorkers.remove(code);
