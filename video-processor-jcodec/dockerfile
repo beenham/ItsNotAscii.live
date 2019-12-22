@@ -1,0 +1,11 @@
+FROM openjdk:12
+
+ENV webport 82
+ENV webbind 127.0.0.1
+ENV port 25522
+ENV bind 127.0.0.1
+ENV name itsnotasciilive
+ENV target http://localhost
+
+COPY target/video-processor-jcodec-1.0-allinone.jar /video-processor-jcodec-1.0.jar
+CMD /usr/bin/java -cp /video-processor-jcodec-1.0.jar live.itsnotascii.JCodecProcessorMain --webport ${webport} --webbind ${webbind} --port ${port} --bind ${bind} --name ${name} --target ${target}

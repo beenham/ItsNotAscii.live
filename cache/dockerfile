@@ -1,0 +1,11 @@
+FROM openjdk:12
+
+ENV webport 81
+ENV webbind 127.0.0.1
+ENV port 25521
+ENV bind 127.0.0.1
+ENV name itsnotasciilive
+ENV target http://localhost
+
+COPY target/cache-1.0-allinone.jar /cache-1.0.jar
+CMD /usr/bin/java -cp /cache-1.0.jar live.itsnotascii.CacheMain --webport ${webport} --webbind ${webbind} --port ${port} --bind ${bind} --name ${name} --target ${target}

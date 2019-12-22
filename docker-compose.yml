@@ -1,0 +1,53 @@
+version: '3'
+services:
+  main:
+    build: './main'
+    container_name: main
+    ports:
+      - '1264:1264'
+    expose:
+      - 1264
+    environment:
+      - webport=1264
+      - port=25520
+      - webbind=main
+      - bind=main
+#      - JVM_OPTS=-Xmx12g -Xms12g -XX:MaxPermSize=1024m
+  cache:
+    build: './cache'
+    container_name: cache
+    ports:
+      - '25521:25521'
+      - '1265:1265'
+    expose:
+      - 25521
+      - 1265
+#    depends_on:
+#      - main
+    links:
+      - main
+    environment:
+      - webport=1265
+      - port=25521
+      - webbind=cache
+      - bind=cache
+      - target=http://main:1264
+  videoprocessor:
+    build: './video-processor-jcodec'
+    container_name: videoprocessor
+    ports:
+      - '25522:25522'
+      - '1266:1266'
+    expose:
+      - 25522
+      - 1266
+#    depends_on:
+#      - main
+    links:
+      - main
+    environment:
+      - webport=1266
+      - port=25522
+      - webbind=videoprocessor
+      - bind=videoprocessor
+      - target=http://main:1264

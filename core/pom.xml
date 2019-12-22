@@ -8,5 +8,6 @@
         <artifactId>parent</artifactId>
         <version>1.0</version>
     </parent>
+
     <artifactId>core</artifactId>
 </project>
