@@ -48,7 +48,7 @@ public class FrameProcessor extends AbstractBehavior<FrameProcessor.Command> {
 	}
 
 	private FrameProcessor onProcessFrames(ProcessFrames f) {
-//		Log.v(TAG, String.format("%s Frames received for %s", f.frames.size(), f.videoCode));
+		Log.v(TAG, String.format("%s %s Frames received for %s", this, f.frames.size(), f.videoCode));
 
 		Colors.ColorProfile profile = Colors.ColorProfile.COLOR_PROFILE_24BIT;
 

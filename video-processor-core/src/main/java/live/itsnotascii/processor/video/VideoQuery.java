@@ -8,9 +8,11 @@ import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import live.itsnotascii.core.UnicodeVideo;
+import live.itsnotascii.core.messages.HttpResponses;
 import live.itsnotascii.util.Log;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -55,21 +57,27 @@ public class VideoQuery extends AbstractBehavior<VideoQuery.Command> {
 
 	private Behavior<Command> onUnicodeFrame(VideoProcessor.UnicodeFrame frame) {
 		this.receivedFrames.add(frame);
+		Log.v(TAG, String.format("Received frame %s for %s", frame.getFrameNum(), frame.getVideoCode()));
 		return replyWhenAllFramesReceived();
 	}
 
 	private Behavior<Command> replyWhenAllFramesReceived() {
 		if (videoInfo != null && receivedFrames.size() == videoInfo.frameCount) {
-			List<byte[]> frames = receivedFrames.stream()
-					.sorted()
-					.map(VideoProcessor.UnicodeFrame::getFrame)
-					.map(String::getBytes)
-					.collect(Collectors.toList());
+			if (videoInfo.frameCount == 0) {
+				replyTo.tell(new VideoProcessor.RespondVideo(request, new UnicodeVideo(request.getCode(),
+						Collections.singletonList(HttpResponses.NOT_FOUND.getBytes()), 1)));
+			} else {
+				List<byte[]> frames = receivedFrames.stream()
+						.sorted()
+						.map(VideoProcessor.UnicodeFrame::getFrame)
+						.map(String::getBytes)
+						.collect(Collectors.toList());
 
-			replyTo.tell(new VideoProcessor.RespondVideo(request,
-					new UnicodeVideo(request.getCode(), frames, videoInfo.frameRate)));
-			worker.tell(new VideoProcessor.Completed(request.getCode()));
-			Log.v(TAG, String.format("Finished processing #%s for video %s", request.getId(), request.getCode()));
+				replyTo.tell(new VideoProcessor.RespondVideo(request,
+						new UnicodeVideo(request.getCode(), frames, videoInfo.frameRate)));
+				worker.tell(new VideoProcessor.Completed(request.getCode()));
+				Log.v(TAG, String.format("Finished processing #%s for video %s", request.getId(), request.getCode()));
+			}
 			return Behaviors.stopped();
 		}
 		return this;
