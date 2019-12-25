@@ -17,6 +17,4 @@
         <version>1.0</version>
     </parent>
     <artifactId>video-processor-jcodec</artifactId>
-
-
 </project>
