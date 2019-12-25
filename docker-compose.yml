@@ -1,53 +1,54 @@
-version: '3'
+version: '2.4'
 services:
   main:
-    build: './main'
+    build: 'main'
     container_name: main
     ports:
-      - '1264:1264'
+      - '80:80'
+      - '25520:25520'
+    mem_limit: 2048m
+    mem_reservation: 1024m
     expose:
-      - 1264
+      - 80
+      - 25520
     environment:
-      - webport=1264
       - port=25520
       - webbind=main
       - bind=main
-#      - JVM_OPTS=-Xmx12g -Xms12g -XX:MaxPermSize=1024m
+      - verbose=-v
+    networks:
+      - network
   cache:
-    build: './cache'
+    build: 'cache'
     container_name: cache
     ports:
       - '25521:25521'
-      - '1265:1265'
     expose:
       - 25521
-      - 1265
-#    depends_on:
-#      - main
-    links:
-      - main
     environment:
-      - webport=1265
       - port=25521
-      - webbind=cache
       - bind=cache
-      - target=http://main:1264
+      - target=http://main
+      - verbose=-v
+    networks:
+      - network
+    mem_limit: 2048m
+    mem_reservation: 1024m
   videoprocessor:
-    build: './video-processor-jcodec'
+    build: 'video-processor-jcodec'
     container_name: videoprocessor
     ports:
       - '25522:25522'
-      - '1266:1266'
     expose:
       - 25522
-      - 1266
-#    depends_on:
-#      - main
-    links:
-      - main
     environment:
-      - webport=1266
       - port=25522
-      - webbind=videoprocessor
       - bind=videoprocessor
-      - target=http://main:1264
+      - target=http://main
+      - verbose=-v
+    networks:
+      - network
+    mem_limit: 2048m
+    mem_reservation: 1024m
+networks:
+  network:

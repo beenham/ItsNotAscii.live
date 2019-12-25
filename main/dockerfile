@@ -5,7 +5,8 @@ ENV webbind 127.0.0.1
 ENV port 25520
 ENV bind 127.0.0.1
 ENV name itsnotasciilive
-ENV target http://localhost
+ENV verbose -v
+ENV JAVA_OPTS="-Xms512M -Xmx1024M -XX:+UseContainerSupport"
 
-COPY target/main-1.0-allinone.jar /main-1.0.jar
-CMD /usr/bin/java -cp /main-1.0.jar live.itsnotascii.Main --webport ${webport} --webbind ${webbind} --port ${port} --bind ${bind} --name ${name} --target ${target}
+COPY target/main-1.0-allinone.jar main-1.0.jar
+ENTRYPOINT exec java ${JAVA_OPTS} -cp /main-1.0.jar live.itsnotascii.Main -n ${name} -p ${port} -b ${bind} -wp ${webport} -wb ${webbind} ${verbose}
